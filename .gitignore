@@ -215,8 +215,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# venv
-.ftg/
-
 # datasets
-/dataset_engineering/raw/CUAD_v1
+/dataset_engineering/raw
+/dataset_engineering/CUAD_v1
