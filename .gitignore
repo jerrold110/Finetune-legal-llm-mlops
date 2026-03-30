@@ -215,6 +215,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# datasets
+# datasets and artifacts
 /dataset_engineering/raw
 /dataset_engineering/CUAD_v1
+/mlrun-data/mlrun.db
