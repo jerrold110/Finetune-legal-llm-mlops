@@ -1,0 +1,1 @@
+MLRun's artifacts are stored here in the mlrun.db file
