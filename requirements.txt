@@ -1,0 +1,4 @@
+# You have to use python 3.9 for the client and server (using 3.9.13 on windows)
+# https://docs.mlrun.org/en/v1.6/install/remote.html#set-up-a-python-3-9-client-environment
+mlrun==1.6.4
+mlrun[s3]==1.6.4
