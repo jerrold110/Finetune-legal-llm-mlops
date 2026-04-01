@@ -1,0 +1,67 @@
+import mlrun
+import pandas as pd
+
+def register_process_raw_data(context, input_uri, artifact_key, label_column, version, output_uri_path):
+    """
+    When you pass your S3 path via the inputs={"source_url": source_url} dictionary in your .run() command, MLRun intercepts that string and automatically converts it into a powerful mlrun.DataItem object before handing it to your prep_data function.
+    """
+    # # print(type(context)) # <class 'mlrun.execution.MLClientCtx'>
+
+    # # permitted formats csv|parquet|pq|tsdb|kv
+    # # https://docs.mlrun.org/en/latest/api/mlrun.execution/index.html#mlrun.execution.MLClientCtx.log_dataset
+
+    # input_uri is an s3 identifier to a file
+    df = input_uri.as_df() # mlrun.get_dataitem(input_uri).as_df()
+    df = df[df['label'] != 'notmentioned']
+
+    # full document
+    full_document = df.groupby(['document_id']).nth(0)[['document_id', 'text']]
+
+    # hypotheses
+    def hypo_inferred(row):
+        """
+        Helper function
+        """
+        # Turn evidence into a single string separated by newlines
+        evidence_list = row['evidence_texts'].tolist()
+        evidence_list_str = "\n".join(evidence_list)
+
+        hypothesis = row['hypothesis']
+        hypo_label = row['label']
+        hypo_id = row['hypothesis_id']
+
+        data_dict = {'hypothesis': hypothesis,
+                    'evidence': evidence_list_str,
+                    'hypothesis_label': hypo_label,
+                    'hypothesis_id': hypo_id
+                    }
+        # return the dictionary as a string
+        return str(data_dict)
+
+    hypotheses_inferred = df.copy()[['document_id','evidence_texts','hypothesis','label','hypothesis_id']]
+    hypotheses_inferred['inference'] = hypotheses_inferred.apply(hypo_inferred, axis=1)
+    hypotheses_inferred = hypotheses_inferred[['document_id', 'inference']]
+
+    # aggregate the hypo_infer strings into a list by document_id
+    hypotheses_inferred_byid = hypotheses_inferred.groupby('document_id')['inference'].agg(list).reset_index()
+
+    # merge full document, and processed hypotheses columns
+    # columns are now: document_id, text, inference (str of long dictionary)
+    final_df = pd.merge(full_document, hypotheses_inferred_byid, on='document_id', how='inner')
+
+    # Add timestamp and origin columns 
+    final_df['timestamp'] = pd.Timestamp.now()
+    final_df['origin'] = "downloaded"
+
+    # write to new location on S3
+    context.log_dataset(key=artifact_key,
+                        tag=version,
+                        df=final_df, 
+                        index=False,
+                        label_column=label_column,
+                        artifact_path=f'{output_uri_path}/{version}', # output_uri_path: s3://legal-llama-data/registered
+                        format="parquet", 
+                        #labels={'version':version}, # don't use this, messes up the artifact path
+                        upload=True)
+    
+    print(f"{input_uri} processed and written to {output_uri_path}/{version}")
