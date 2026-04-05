@@ -1,8 +1,7 @@
+metadata:
+  name: finetune-legal-extractor
 kind: project
 spec:
-  workflows:
-  - name: register_raw_datasets
-    path: src/workflow_register_raw_datasets.py
   source: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
   functions:
   - url: src/register_raw_dataset.py
@@ -10,9 +9,10 @@ spec:
     kind: job
     image: mlrun/mlrun
     handler: process_raw
+  workflows:
+  - name: register_raw_datasets
+    path: src/workflow_register_raw_datasets.py
   origin_url: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
-  description: A fine-tuned legal extractor LLM
-  desired_state: online
   conda: ''
-metadata:
-  name: finetune-legal-extractor
+  desired_state: online
+  description: A fine-tuned legal extractor LLM

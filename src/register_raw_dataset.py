@@ -52,7 +52,7 @@ def process_raw(context, input_uri, artifact_key, label_column, version, output_
 
     # Add additional columns
     final_df['model_repo_id'] = ""
-    final_df['commit_id'] = ""
+    final_df['model_commit_id'] = ""
     final_df['timestamp'] = pd.Timestamp.now()
     final_df['origin'] = "downloaded"
 
