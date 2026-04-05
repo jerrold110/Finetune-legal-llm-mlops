@@ -1,14 +1,15 @@
 import mlrun
 import pandas as pd
+import uuid
 
-def register_process_raw_data(context, input_uri, artifact_key, label_column, version, output_uri_path):
+def process_raw(context, input_uri, artifact_key, label_column, version, output_uri_path):
     """
     When you pass your S3 path via the inputs={"source_url": source_url} dictionary in your .run() command, MLRun intercepts that string and automatically converts it into a powerful mlrun.DataItem object before handing it to your prep_data function.
     """
-    # # print(type(context)) # <class 'mlrun.execution.MLClientCtx'>
+    # print(type(context)) # <class 'mlrun.execution.MLClientCtx'>
 
-    # # permitted formats csv|parquet|pq|tsdb|kv
-    # # https://docs.mlrun.org/en/latest/api/mlrun.execution/index.html#mlrun.execution.MLClientCtx.log_dataset
+    # permitted formats csv|parquet|pq|tsdb|kv
+    # https://docs.mlrun.org/en/latest/api/mlrun.execution/index.html#mlrun.execution.MLClientCtx.log_dataset
 
     # input_uri is an s3 identifier to a file
     df = input_uri.as_df() # mlrun.get_dataitem(input_uri).as_df()
@@ -49,15 +50,21 @@ def register_process_raw_data(context, input_uri, artifact_key, label_column, ve
     # columns are now: document_id, text, inference (str of long dictionary)
     final_df = pd.merge(full_document, hypotheses_inferred_byid, on='document_id', how='inner')
 
-    # Add timestamp and origin columns 
+    # Add additional columns
+    final_df['model_repo_id'] = ""
+    final_df['commit_id'] = ""
     final_df['timestamp'] = pd.Timestamp.now()
     final_df['origin'] = "downloaded"
+
+    # Add unique identifier column
+    uuids = [str(uuid.uuid4()) for _ in range(len(final_df))]
+    final_df.insert(0, 'id', uuids)
 
     # write to new location on S3
     context.log_dataset(key=artifact_key,
                         tag=version,
                         df=final_df, 
-                        index=False,
+                        #index="id",
                         label_column=label_column,
                         artifact_path=f'{output_uri_path}/{version}', # output_uri_path: s3://legal-llama-data/registered
                         format="parquet", 

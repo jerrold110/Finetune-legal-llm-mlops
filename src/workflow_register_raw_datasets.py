@@ -17,7 +17,7 @@ def pipeline(source_path,
     Registers 3 datasets: train, validate, test
     """
     # Train dataset
-    runobj = mlrun.run_function("raw-data-register-function",  # use the function name registered in the register_funcs.ipynb file
+    runobj = mlrun.run_function("raw-proc",  # use the function name registered in the register_funcs.ipynb file
                 inputs={"input_uri": f'{source_path}/train.parquet'},
                 params={"label_column": "inference",
                         "artifact_key": f'train_data',
@@ -27,7 +27,7 @@ def pipeline(source_path,
         )
     
     # Validation dataset
-    runobj = mlrun.run_function("raw-data-register-function", 
+    runobj = mlrun.run_function("raw-proc", 
                 inputs={"input_uri": f'{source_path}/validation.parquet'},
                 params={"label_column": "inference",
                         "artifact_key": f'validation_data',
@@ -37,7 +37,7 @@ def pipeline(source_path,
         )
     
     # Test dataset
-    runobj = mlrun.run_function("raw-data-register-function", 
+    runobj = mlrun.run_function("raw-proc", 
                 inputs={"input_uri": f'{source_path}/test.parquet'},
                 params={"label_column": "inference",
                         "artifact_key": f'test_data',

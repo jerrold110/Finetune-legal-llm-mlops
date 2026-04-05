@@ -219,3 +219,6 @@ __marimo__/
 /dataset_engineering/raw
 /dataset_engineering/CUAD_v1
 /mlrun-data/mlrun.db
+
+# testing
+test.ipynb
