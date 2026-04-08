@@ -13,7 +13,9 @@ def process_raw(context, input_uri, artifact_key, label_column, version, output_
 
     # input_uri is an s3 identifier to a file
     df = input_uri.as_df() # mlrun.get_dataitem(input_uri).as_df()
-    df = df[df['label'] != 'notmentioned']
+
+    # rename not mentioned to not_mentioned for better parsing later on
+    df['label'] = df['label'].replace({'notmentioned': 'not_mentioned'})
 
     # full document
     full_document = df.groupby(['document_id']).nth(0)[['document_id', 'text']]
@@ -25,19 +27,24 @@ def process_raw(context, input_uri, artifact_key, label_column, version, output_
         """
         # Turn evidence into a single string separated by newlines
         evidence_list = row['evidence_texts'].tolist()
-        evidence_list_str = "\n".join(evidence_list)
+        evidence_list_str = ". ".join(evidence_list)
 
         hypothesis = row['hypothesis']
         hypo_label = row['label']
         hypo_id = row['hypothesis_id']
 
-        data_dict = {'hypothesis': hypothesis,
-                    'evidence': evidence_list_str,
-                    'hypothesis_label': hypo_label,
-                    'hypothesis_id': hypo_id
-                    }
+        assert None not in [hypo_id, hypothesis, evidence_list_str, hypo_label], f"One of the values in {[hypo_id, hypothesis, evidence_list_str, hypo_label]} is None"
+        
+        assert all(isinstance(x, str) for x in [hypo_id, hypothesis, evidence_list_str, hypo_label]), f"One of the values in {[hypo_id, hypothesis, evidence_list_str, hypo_label]} is not a string"
+
+        data_dict = {
+            'hypothesis_id': hypo_id,
+            'hypothesis_label': hypo_label,
+            'hypothesis': hypothesis,
+            'source_clause': evidence_list_str
+        }
         # return the dictionary as a string
-        return str(data_dict)
+        return data_dict
 
     hypotheses_inferred = df.copy()[['document_id','evidence_texts','hypothesis','label','hypothesis_id']]
     hypotheses_inferred['inference'] = hypotheses_inferred.apply(hypo_inferred, axis=1)
@@ -64,7 +71,7 @@ def process_raw(context, input_uri, artifact_key, label_column, version, output_
     context.log_dataset(key=artifact_key,
                         tag=version,
                         df=final_df, 
-                        #index="id",
+                        index="id",
                         label_column=label_column,
                         artifact_path=f'{output_uri_path}/{version}', # output_uri_path: s3://legal-llama-data/registered
                         format="parquet", 
