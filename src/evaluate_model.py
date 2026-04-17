@@ -75,35 +75,67 @@ def get_hypothesis_for_id(reference:list, hypothesis_id:str):
 
 def document_level_metrics(references:list, inferences:list):
     accuracy = None
-    average_fmeasure = []
-    accuracy_above_75fmeasure = None
+    t_average_fmeasure = []
+    f_average_fmeasure = []
+    t_average_fmeasure_above_75 = []
+    f_average_fmeasure_above_75 = []
+    t_predictions = 0
+    t_predictions_above_75fmeasure = 0
+    f_predictions = 0
+    f_predictions_above_75fmeasure = 0
 
-    true_predictions = 0
-    true_predictions_above_75fmeasure = 0
     for item in inferences:
         inference = item
         inference_label = inference['label']
         reference = get_hypothesis_for_id(references, item['hypothesis_id'])
         reference_label = reference['label']
         if reference_label == inference_label:
-            true_predictions += 1
-            fmeasure = compare_sources_fmeasure(reference['source_clause'], inference['source_clause'])
-            average_fmeasure.append(fmeasure)
+            t_predictions += 1
+            if reference_label == "not_mentioned" and inference_label == "not_mentioned":
+                fmeasure = 1.0
+            else:
+                fmeasure = compare_sources_fmeasure(reference['source_clause'], inference['source_clause'])
+            t_average_fmeasure.append(fmeasure)
             if fmeasure > 0.75:
-                true_predictions_above_75fmeasure += 1
-
+                t_average_fmeasure_above_75.append(fmeasure)
+                t_predictions_above_75fmeasure += 1
+        else:
+            f_predictions += 1
+            fmeasure = compare_sources_fmeasure(reference['source_clause'], inference['source_clause'])
+            
+            f_average_fmeasure.append(fmeasure)
+            if fmeasure > 0.75:
+                f_average_fmeasure_above_75.append(fmeasure)
+                f_predictions_above_75fmeasure += 1
+        # print(reference_label, inference_label)
+        # print(fmeasure)
+        
+    # print(f_average_fmeasure, t_average_fmeasure)
+    # print(f_predictions, t_predictions)
+    # print(f_predictions_above_75fmeasure, t_predictions_above_75fmeasure)
     # calculate all the metrics for a single document
     length = len(inferences)
-    accuracy = true_predictions / length
-    average_fmeasure = sum(average_fmeasure) / len(average_fmeasure) if average_fmeasure else 0
-    accuracy_above_75fmeasure = true_predictions_above_75fmeasure / true_predictions if true_predictions != 0 else 0
+    accuracy = t_predictions / length
+
+    # what is the average fmeasure of the true predictions?
+    __t_average_fmeasure = sum(t_average_fmeasure) / len(t_average_fmeasure) if t_average_fmeasure else 0 # reused variable
+    # what percentage of true predictions have over 75 fmeasure?
+    t_accuracy_above_75fmeasure = t_predictions_above_75fmeasure / t_predictions if t_predictions != 0 else 0
+
+    # what is the average fmeasure of the false predictions?
+    __f_average_fmeasure = sum(f_average_fmeasure) / len(f_average_fmeasure) if f_average_fmeasure else 0 # reused variable
+    # what percentage of the false predictions have over 75 fmeasure?
+    f_accuracy_above_75fmeasure = f_predictions_above_75fmeasure / f_predictions if f_predictions != 0 else 0
 
     return {'accuracy': accuracy,
-            'average_fmeasure': average_fmeasure,
-            'accuracy_above_75fmeasure': accuracy_above_75fmeasure,
+            't_average_fmeasure': __t_average_fmeasure,
+            't_accuracy_above_75fmeasure': t_accuracy_above_75fmeasure,
+            'f_average_fmeasure': __f_average_fmeasure,
+            'f_accuracy_above_75fmeasure': f_accuracy_above_75fmeasure,
+            # counts
             'length': length, 
-            'true_predictions': true_predictions,
-            'true_predictions_above_75fmeasure': true_predictions_above_75fmeasure}
+            'true_predictions': t_predictions,
+            'true_predictions_above_75fmeasure': t_predictions_above_75fmeasure}
 
 def dataset_level_metrics(reference_dataset:list, inference_dataset: list):
     """
@@ -116,8 +148,10 @@ def dataset_level_metrics(reference_dataset:list, inference_dataset: list):
     assert len(reference_dataset) == len(inference_dataset), f"Reference and inference datasets do not have the same length. {len(reference_dataset)} vs {len(inference_dataset)}"
 
     accuracies = []
-    average_fmeasures = []
-    accuracies_above_75fmeasure = []
+    t_average_fmeasures = []
+    t_accuracies_above_75fmeasure = []
+    f_average_fmeasures = []
+    f_accuracies_above_75fmeasure = []
 
     for i in range(len(reference_dataset)):
         reference_document = reference_dataset[i]
@@ -129,38 +163,49 @@ def dataset_level_metrics(reference_dataset:list, inference_dataset: list):
 
         document_metrics = document_level_metrics(reference_document, inference_document)
         accuracies.append(document_metrics['accuracy'])
-        average_fmeasures.append(document_metrics['average_fmeasure'])
-        accuracies_above_75fmeasure.append(document_metrics['accuracy_above_75fmeasure'])
+        t_average_fmeasures.append(document_metrics['t_average_fmeasure'])
+        t_accuracies_above_75fmeasure.append(document_metrics['t_accuracy_above_75fmeasure'])
+        f_average_fmeasures.append(document_metrics['f_average_fmeasure'])
+        f_accuracies_above_75fmeasure.append(document_metrics['f_accuracy_above_75fmeasure'])
 
     
     # calculate the average and minimum of the document level metrics across the dataset, and also the standard deviation for reference
     average_accuracy = sum(accuracies) / len(accuracies) if accuracies else 0
-    average_fmeasure = sum(average_fmeasures) / len(average_fmeasures) if average_fmeasures else 0
-    average_accuracy_above_75fmeasure = sum(accuracies_above_75fmeasure) / len(accuracies_above_75fmeasure) if accuracies_above_75fmeasure else 0
+    t_average_fmeasure = sum(t_average_fmeasures) / len(t_average_fmeasures) if t_average_fmeasures else 0
+    t_average_accuracy_above_75fmeasure = sum(t_accuracies_above_75fmeasure) / len(t_accuracies_above_75fmeasure) if t_accuracies_above_75fmeasure else 0
+    f_average_fmeasure = sum(f_average_fmeasures) / len(f_average_fmeasures) if f_average_fmeasures else 0
+    f_average_accuracy_above_75fmeasure = sum(f_accuracies_above_75fmeasure) / len(f_accuracies_above_75fmeasure) if f_accuracies_above_75fmeasure else 0
+    # document with the worse metrics in the whole dataset
     min_accuracy = min(accuracies) if accuracies else 0
-    min_average_fmeasure = min(average_fmeasures) if average_fmeasures else 0
-    min_accuracy_above_75fmeasure = min(accuracies_above_75fmeasure) if accuracies_above_75fmeasure else 0
+    min_t_average_fmeasure = min(t_average_fmeasures) if t_average_fmeasures else 0
+    min_t_accuracy_above_75fmeasure = min(t_accuracies_above_75fmeasure) if t_accuracies_above_75fmeasure else 0
+    min_f_average_fmeasure = min(f_average_fmeasures) if f_average_fmeasures else 0
+    min_f_accuracy_above_75fmeasure = min(f_accuracies_above_75fmeasure) if f_accuracies_above_75fmeasure else 0
 
     if average_accuracy == 0:
         print("Warning: Average accuracy is 0, which may indicate that the model is not performing well on the true predictions.")
-    if average_fmeasure == 0:
+    if t_average_fmeasure == 0:
         print("Warning: Average fmeasure is 0, which may indicate that the model is not performing well on the true predictions.")
-    if average_accuracy_above_75fmeasure == 0:
+    if t_average_accuracy_above_75fmeasure == 0:
         print("Warning: Average accuracy above 75% fmeasure is 0, which may indicate that the model is not performing well on the true predictions.")
 
     return {'average_accuracy': average_accuracy,
-            'average_fmeasure': average_fmeasure,
-            'average_accuracy_above_75fmeasure': average_accuracy_above_75fmeasure,
+            't_average_fmeasure': t_average_fmeasure,
+            't_average_accuracy_above_75fmeasure': t_average_accuracy_above_75fmeasure,
+            'f_average_fmeasure': f_average_fmeasure,
+            'f_average_accuracy_above_75fmeasure': f_average_accuracy_above_75fmeasure,
             'min_accuracy': min_accuracy,
-            'min_average_fmeasure': min_average_fmeasure,
-            'min_accuracy_above_75fmeasure': min_accuracy_above_75fmeasure}
+            'min_t_average_fmeasure': min_t_average_fmeasure,
+            'min_t_accuracy_above_75fmeasure': min_t_accuracy_above_75fmeasure,
+            'min_f_average_fmeasure': min_f_average_fmeasure,
+            'min_f_accuracy_above_75fmeasure': min_f_accuracy_above_75fmeasure}
 
 if __name__ == "__main__":
     document_a = [
-        # {'hypothesis_id': 'nda-11', 
-        # 'hypothesis': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
-        # 'source_clause': "The Recipient will not copy or reproduce the Confidential Information except as reasonably required for the purposes contemplated in this Agreement, and will ensure that any confidentiality or other proprietary rights notices on the Confidential Information are reproduced on all copies.", 
-        # 'label': 'entailment'},
+        {'hypothesis_id': 'nda-11', 
+        'hypothesis': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
+        'source_clause': "The Recipient will not copy or reproduce the Confidential Information except as reasonably required for the purposes contemplated in this Agreement, and will ensure that any confidentiality or other proprietary rights notices on the Confidential Information are reproduced on all copies.", 
+        'label': 'entailment'},
         {'hypothesis_id': 'nda-16',
         'hypothesis': 'Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.',
         'source_clause': "All Confidential Information in any form and any medium, including all copies thereof, disclosed to the Recipient shall be returned to UNHCR or destroyed: (a) if a business relationship is not entered into with UNHCR on or before the date which is three (3) months after the date both Parties have signed the Agreement; or (b) promptly upon request by the UNHCR at any time.", 
@@ -168,14 +213,14 @@ if __name__ == "__main__":
         ]
 
     document_b = [
-        # {'hypothesis_id': 'nda-11', 
-        # 'hypothesis': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
-        # 'source_clause': "The Recipient will not copy or reproduce the Confidential Information except as reasonably required for the purposes contemplated in this Agreement, and will ensure that any confidentiality or other proprietary rights notices on the Confidential Information are reproduced on all copies.", 
-        # 'label': 'entailment'},
+        {'hypothesis_id': 'nda-11', 
+        'hypothesis': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
+        'source_clause': "The Recipient will not copy or reproduce the Confidential Information except as reasonably required for the purposes contemplated in this Agreement, and will ensure that any confidentiality or other proprietary rights notices on the Confidential Information are reproduced on all copies.", 
+        'label': 'entailment'},
         {'hypothesis_id': 'nda-16',
         'hypothesis': 'Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.',
         'source_clause': "All Confidential Information in any form and any medium, including all copies thereof, disclosed to the Recipient shall be returned to UNHCR or destroyed: (a) if a business relationship.", 
-        'label': 'contradiction'}
+        'label': 'entailment'}
         ]
 
     print(document_level_metrics(document_a, document_b))

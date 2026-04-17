@@ -1,0 +1,122 @@
+ml.g5.2xlarge 8CPU 32RAM 24VRAM
+ml.g5.4xlarge 16CPU 64RAM 24VRAM        32-64 batch size for 7B model
+ml.g6e.2xlarge 8CPU 64RAM 48VRAM(1)
+ml.g6.12xlarge 48CPU 192RAM 96VRAM(4)             $4.6/hour
+ml.g5.48xlarge 192CPU 768RAM 192VRAM(8)
+
+inf2.24xlarge 96CPU 384RAM 192VRAM         $6.49/hour -- this seems to require a very specific code setup and it ran infinitely work when I tried https://huggingface.co/docs/sagemaker/examples/sagemaker-sdk-deploy-llama-3-3-70b-inferentia2#deploy-llama-33-70b-on-aws-inferentia2
+
+
+-- DO NOT USE THIS
+ml.p4d.24xlarge 96CPU 1152RAM 320VRAM           for 80B model
+
+
+An 8B model at 16bit weights (Llama3.1) requires the following amounts of memory for
+
+8B model at native 16 bits:
+8B * 2 bytes * 1.2
+= 19.2 gb
+
+8B model quantized to 8 bits:
+8B * 1 bytes * 1.2
+= 9.6 gb
+
+14-24B model at native 16 bits:
+33.6 - 57.6
+
+36B model at native 16 bits:
+86.4
+
+A 70B model at 16 bit weights:
+70B * 2 * 1.2
+= 168 gb
+
+A 70B model at 16bit weights quantized to 8bit
+70B * 1 * 1.2
+= 84 gb
+
+
+Model results:
+Raising temperature only makes results worse
+===================================================
+Corrected evaluation logic
+
+Hermes 4.3 36B fp8quantized ()
+0.71
+0.97, 0.91
+0.01, 0.0
+17, didn't check if follows logic
+
+Hermes 4 14B (ml.g6e.2xlarge) slightly worser quotes at same accuracy for fp8. Sometimes a completely wrong quote (0.06)
+0.64
+1.0, 1.0
+0.0, 0.0
+17, follows logic
+
+===================================================
+Hermes 4 70B (Quantised FP8, loaded on ml.g5.48xlarge in 14 mins) with improved prompt (initially 0.41)
+0.47 - 0.41
+0.83 - 0.95
+0.75 - 0.85
+17, didn't check if rules followed
+
+Hermes 4.3 36B 0.3T (Seed quantized to fp8) - unquantized version cannot run on ml.g6.12xlarge because timeout keeps getting hit no matter what i use. I think multiple gpu instance required. This cannot be fine-tuned by optimum
+0.47 - 0.47
+0.95 - 1.0
+0.88 - 1.0
+17
+
+Hermes 4 14B 0.5T
+0.53
+0.82
+0.77
+17, source clauses are repeated, some correct label clauses are very wrong
+
+Hermes 4 14B 0.3T
+0.41 - 0.47
+1.0 - 0.9
+1.0 - 0.88
+17, source clauses are repeated, but others are correct
+
+Hermes 4 14B 0.1T
+0.47
+0.95
+0.875
+17
+17, source clauses are repeated, but others are correct
+
+Deep heermes 3 json
+0.375
+0.658
+0.66
+16
+
+Deep hermes 3
+0.375
+0.66
+0.66
+16
+
+Hermes 3 json
+0.23
+1.0
+1.0
+17
+
+Hermes 3
+0.23
+1.0
+1.0
+17
+
+Llama 3 json
+0.53 
+0.66
+0.66
+17, logic followed
+
+Llama 3
+0.53
+0.68
+0.66
+17, logic followed

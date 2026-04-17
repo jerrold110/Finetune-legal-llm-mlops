@@ -16,6 +16,9 @@ An 8B model at 16bit weights (Llama3.1) requires the following amounts of memory
 8B * 1 bytes * 1.2
 = 9.6 gb
 
+14B model at 8 bits:
+16.8
+
 14-24B model at native 16 bits:
 33.6 - 57.6
 
@@ -32,6 +35,9 @@ A 70B model at 16bit weights quantized to 8bit
 
 Further memory calculations:
 https://docs.djl.ai/master/docs/serving/serving/docs/lmi/deployment_guide/instance-type-selection.html
+
+## openai messages format is supported
+https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/chat_input_output_schema.html
 
 ### Model registry
 The model files are stored in S3 while the registry is maintained in the local MLRun project

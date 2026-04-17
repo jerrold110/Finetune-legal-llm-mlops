@@ -67,6 +67,16 @@ def process_raw(context, input_uri, artifact_key, label_column, version, output_
     uuids = [str(uuid.uuid4()) for _ in range(len(final_df))]
     final_df.insert(0, 'id', uuids)
 
+    #jsonl_string = final_df.to_json(orient="records", lines=True)
+
+    # write to new location on S3 as an artifact in jsonl
+    # context.log_artifact(item=artifact_key,
+    #                      body=jsonl_string,
+    #                      tag=version,
+    #                      format='jsonl',
+    #                      artifact_path=f'{output_uri_path}/{version}', # output_uri_path: s3://legal-llama-data/registered
+    #                      upload=True)
+
     # write to new location on S3
     context.log_dataset(key=artifact_key,
                         tag=version,

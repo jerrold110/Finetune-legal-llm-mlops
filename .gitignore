@@ -221,4 +221,4 @@ __marimo__/
 /mlrun-data/mlrun.db
 
 # testing
-test.ipynb
+test_*

@@ -1,7 +1,8 @@
-# You have to use python 3.9 for the client and server (using 3.9.13 on windows)
-# https://docs.mlrun.org/en/v1.6/install/remote.html#set-up-a-python-3-9-client-environment
-# py -3.9 -m venv .venv
-sagemaker=2.250.0
+# Recommended python version for current mlrun is 3.11 https://docs.mlrun.org/en/stable/setup-guide.html
+# in the above version, that was for mlrun 1.6 - mistake on my part
+# python 3.11 is required for sagemaker >=3.0.0
 mlrun==1.10.2
 mlrun[s3]==1.10.2
-kfp==1.8.22
+mlrun[kfp18]==1.10.2
+sagemaker==2.250.0
+dotenv
