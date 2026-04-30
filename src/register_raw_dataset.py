@@ -2,7 +2,12 @@ import mlrun
 import pandas as pd
 import uuid
 
-def process_raw(context, input_uri, artifact_key, label_column, version, output_uri_path):
+def process_raw(context,
+                input_uri,
+                artifact_key,
+                label_column,
+                version,
+                output_uri_path):
     """
     When you pass your S3 path via the inputs={"source_url": source_url} dictionary in your .run() command, MLRun intercepts that string and automatically converts it into a powerful mlrun.DataItem object before handing it to your prep_data function.
     """
@@ -39,7 +44,7 @@ def process_raw(context, input_uri, artifact_key, label_column, version, output_
 
         data_dict = {
             'hypothesis_id': hypo_id,
-            'hypothesis_label': hypo_label,
+            'label': hypo_label,
             'hypothesis': hypothesis,
             'source_clause': evidence_list_str
         }
@@ -58,17 +63,16 @@ def process_raw(context, input_uri, artifact_key, label_column, version, output_
     final_df = pd.merge(full_document, hypotheses_inferred_byid, on='document_id', how='inner')
 
     # Add additional columns
-    final_df['model_repo_id'] = ""
-    final_df['model_commit_id'] = ""
+    final_df['model_repo'] = ""
+    final_df['model_repo_version'] = ""
     final_df['timestamp'] = pd.Timestamp.now()
-    final_df['origin'] = "downloaded"
+    final_df['origin'] = "in_house"
 
     # Add unique identifier column
     uuids = [str(uuid.uuid4()) for _ in range(len(final_df))]
     final_df.insert(0, 'id', uuids)
 
     #jsonl_string = final_df.to_json(orient="records", lines=True)
-
     # write to new location on S3 as an artifact in jsonl
     # context.log_artifact(item=artifact_key,
     #                      body=jsonl_string,

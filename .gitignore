@@ -156,6 +156,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+wenv/
 
 # Spyder project settings
 .spyderproject
@@ -222,3 +223,4 @@ __marimo__/
 
 # testing
 test_*
+past_notebooks

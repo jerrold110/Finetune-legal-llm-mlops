@@ -3,6 +3,9 @@
 # python 3.11 is required for sagemaker >=3.0.0
 mlrun==1.10.2
 mlrun[s3]==1.10.2
-mlrun[kfp18]==1.10.2
 sagemaker==2.250.0
-dotenv
+transformers==4.56.2 # transformers 4.56.2 is not too old for qwen3 tokenizer
+dotenv==0.9.9
+ipython==8.39.0
+rouge-score==0.1.2
+# # HF libraries

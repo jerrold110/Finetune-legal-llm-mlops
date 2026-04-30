@@ -53,6 +53,8 @@ services:
       MLRUN_UI__URL: http://localhost:8060
       # not running on k8s meaning no need to store secrets
       MLRUN_SECRET_STORES__KUBERNETES__AUTO_ADD_PROJECT_SECRETS: "false"
+      # Disable K8s
+      MLRUN_K8S_ENABLED: "false"  
       # let mlrun control nuclio resources
       MLRUN_HTTPDB__PROJECTS__FOLLOWERS: "nuclio"
     volumes:

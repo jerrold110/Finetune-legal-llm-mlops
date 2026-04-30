@@ -4,7 +4,7 @@ precision: Measures the number of overlapping units (n-grams) between the genera
 recall: Measures the number of overlapping units (n-grams) between the generated text and the reference text, divided by the total number of units in the reference text.
 fmeasure: The harmonic mean of precision and recall, providing a single score that balances both aspects
 .
-It is acceptable if the generated text is longer than the reference text, as long as it contains the relevant information and is coherent. The key is to ensure that the generated text captures the essential content of the reference text. Therefore, recall is more important. However we till use fmeasure as the main metric to evaluate the model performance, as it provides a balanced view of both precision and recall (we do not want too many words that are not relevant to the answer).
+It is acceptable if the generated text is longer than the reference text, as long as it contains the relevant information and is coherent. The key is to ensure that the generated text captures the essential content of the reference text. Therefore, recall is more important. (ignore) However we till use fmeasure as the main metric to evaluate the model performance, as it provides a balanced view of both precision and recall (we do not want too many words that are not relevant to the answer) (ignore).
 
 Source clause extracts can have multiple extracts and be out of order, hence I will be using rouge-2 instead of rouge-3+ because, rouge scores don't change much as N increases, and because the source extract could be made of multiple quotes in different orders - a high value of N will be too sensitive to this noise. rouge-1 does not capture enough information since it only considers unigrams.
 
@@ -26,7 +26,7 @@ Both the reference and the inference should have all 17 hypothesis_ids, and the 
 """
 
 from rouge_score import rouge_scorer
-scorer = rouge_scorer.RougeScorer(['rouge2', 'rouge4'], use_stemmer=False)
+scorer = rouge_scorer.RougeScorer(['rouge3'], use_stemmer=False)
 # scores = scorer.score(target='this is war.',
 #                       prediction='war is this')
 # print(scores)
@@ -65,7 +65,7 @@ def compare_sources_fmeasure(reference_clause, generated_clause):
                           prediction=generated_clause)
     # print(scores)
     # exit(0)
-    return scores['rouge2'].fmeasure
+    return scores['rouge3'].fmeasure
 
 def get_hypothesis_for_id(reference:list, hypothesis_id:str):
     for item in reference:
@@ -120,85 +120,82 @@ def document_level_metrics(references:list, inferences:list):
     # what is the average fmeasure of the true predictions?
     __t_average_fmeasure = sum(t_average_fmeasure) / len(t_average_fmeasure) if t_average_fmeasure else 0 # reused variable
     # what percentage of true predictions have over 75 fmeasure?
-    t_accuracy_above_75fmeasure = t_predictions_above_75fmeasure / t_predictions if t_predictions != 0 else 0
+    t_perc_above_75fmeasure = t_predictions_above_75fmeasure / t_predictions if t_predictions != 0 else 0
 
     # what is the average fmeasure of the false predictions?
     __f_average_fmeasure = sum(f_average_fmeasure) / len(f_average_fmeasure) if f_average_fmeasure else 0 # reused variable
     # what percentage of the false predictions have over 75 fmeasure?
-    f_accuracy_above_75fmeasure = f_predictions_above_75fmeasure / f_predictions if f_predictions != 0 else 0
+    f_perc_above_75fmeasure = f_predictions_above_75fmeasure / f_predictions if f_predictions != 0 else 0
 
     return {'accuracy': accuracy,
             't_average_fmeasure': __t_average_fmeasure,
-            't_accuracy_above_75fmeasure': t_accuracy_above_75fmeasure,
+            't_perc_above_75fmeasure': t_perc_above_75fmeasure,
             'f_average_fmeasure': __f_average_fmeasure,
-            'f_accuracy_above_75fmeasure': f_accuracy_above_75fmeasure,
+            'f_perc_above_75fmeasure': f_perc_above_75fmeasure,
             # counts
             'length': length, 
             'true_predictions': t_predictions,
             'true_predictions_above_75fmeasure': t_predictions_above_75fmeasure}
 
-def dataset_level_metrics(reference_dataset:list, inference_dataset: list):
+def dataset_level_metrics(dataset_metrics_list:list):
     """
     I am largely interested in the averages and the minimum of the document level metrics across the dataset, but I will also calculate the standard deviation for reference.
 
-    Assume that the reference dataset and inference dataset are in order
-
-    Will the format be list? Pandas dataframe? Pyarrow table?
+    For scalability, the input should be a list of calculated document metrics, the entire test dataset is too large to loop over in production
     """
-    assert len(reference_dataset) == len(inference_dataset), f"Reference and inference datasets do not have the same length. {len(reference_dataset)} vs {len(inference_dataset)}"
-
     accuracies = []
     t_average_fmeasures = []
-    t_accuracies_above_75fmeasure = []
+    t_percs_above_75fmeasure = []
     f_average_fmeasures = []
-    f_accuracies_above_75fmeasure = []
+    f_percs_above_75fmeasure = []
 
-    for i in range(len(reference_dataset)):
-        reference_document = reference_dataset[i]
-        inference_document = inference_dataset[i]
-
+    for i in range(len(dataset_metrics_list)):
         # Ensure that the hypothesis ids and hypotheses match for both reference and inference documents
-        assert ensure_id_matches_hypothesis(reference_document), f"Reference document {i} has mismatching hypothesis ids and hypotheses."
-        assert ensure_id_matches_hypothesis(inference_document), f"Inference document {i} has mismatching hypothesis ids and hypotheses."
+        # assert ensure_id_matches_hypothesis(reference_document), f"Reference document {i} has mismatching hypothesis ids and hypotheses."
+        # assert ensure_id_matches_hypothesis(inference_document), f"Inference document {i} has mismatching hypothesis ids and hypotheses."
 
-        document_metrics = document_level_metrics(reference_document, inference_document)
+        document_metrics = dataset_metrics_list[i]
+
         accuracies.append(document_metrics['accuracy'])
         t_average_fmeasures.append(document_metrics['t_average_fmeasure'])
-        t_accuracies_above_75fmeasure.append(document_metrics['t_accuracy_above_75fmeasure'])
+        t_percs_above_75fmeasure.append(document_metrics['t_perc_above_75fmeasure'])
         f_average_fmeasures.append(document_metrics['f_average_fmeasure'])
-        f_accuracies_above_75fmeasure.append(document_metrics['f_accuracy_above_75fmeasure'])
+        f_percs_above_75fmeasure.append(document_metrics['f_perc_above_75fmeasure'])
 
     
     # calculate the average and minimum of the document level metrics across the dataset, and also the standard deviation for reference
     average_accuracy = sum(accuracies) / len(accuracies) if accuracies else 0
     t_average_fmeasure = sum(t_average_fmeasures) / len(t_average_fmeasures) if t_average_fmeasures else 0
-    t_average_accuracy_above_75fmeasure = sum(t_accuracies_above_75fmeasure) / len(t_accuracies_above_75fmeasure) if t_accuracies_above_75fmeasure else 0
+    t_average_perc_above_75fmeasure = sum(t_percs_above_75fmeasure) / len(t_percs_above_75fmeasure) if t_percs_above_75fmeasure else 0
     f_average_fmeasure = sum(f_average_fmeasures) / len(f_average_fmeasures) if f_average_fmeasures else 0
-    f_average_accuracy_above_75fmeasure = sum(f_accuracies_above_75fmeasure) / len(f_accuracies_above_75fmeasure) if f_accuracies_above_75fmeasure else 0
-    # document with the worse metrics in the whole dataset
+    f_average_perc_above_75fmeasure = sum(f_percs_above_75fmeasure) / len(f_percs_above_75fmeasure) if f_percs_above_75fmeasure else 0
+    # document with the worst metrics in the whole dataset
     min_accuracy = min(accuracies) if accuracies else 0
     min_t_average_fmeasure = min(t_average_fmeasures) if t_average_fmeasures else 0
-    min_t_accuracy_above_75fmeasure = min(t_accuracies_above_75fmeasure) if t_accuracies_above_75fmeasure else 0
+    min_t_perc_above_75fmeasure = min(t_percs_above_75fmeasure) if t_percs_above_75fmeasure else 0
     min_f_average_fmeasure = min(f_average_fmeasures) if f_average_fmeasures else 0
-    min_f_accuracy_above_75fmeasure = min(f_accuracies_above_75fmeasure) if f_accuracies_above_75fmeasure else 0
+    min_f_perc_above_75fmeasure = min(f_percs_above_75fmeasure) if f_percs_above_75fmeasure else 0
 
     if average_accuracy == 0:
         print("Warning: Average accuracy is 0, which may indicate that the model is not performing well on the true predictions.")
     if t_average_fmeasure == 0:
         print("Warning: Average fmeasure is 0, which may indicate that the model is not performing well on the true predictions.")
-    if t_average_accuracy_above_75fmeasure == 0:
+    if t_average_perc_above_75fmeasure == 0:
         print("Warning: Average accuracy above 75% fmeasure is 0, which may indicate that the model is not performing well on the true predictions.")
 
-    return {'average_accuracy': average_accuracy,
+    # t_average_fmeasure: the average fmeasure of true predictions
+    # t_average_accuracy_above_75fmeasure: what percentage of true predictions have above 75 fmeasure
+    return {'count': len(dataset_metrics_list),
+            'average_accuracy': average_accuracy,
             't_average_fmeasure': t_average_fmeasure,
-            't_average_accuracy_above_75fmeasure': t_average_accuracy_above_75fmeasure,
+            't_average_perc_above_75fmeasure': t_average_perc_above_75fmeasure,
             'f_average_fmeasure': f_average_fmeasure,
-            'f_average_accuracy_above_75fmeasure': f_average_accuracy_above_75fmeasure,
+            'f_average_perc_above_75fmeasure': f_average_perc_above_75fmeasure,
             'min_accuracy': min_accuracy,
             'min_t_average_fmeasure': min_t_average_fmeasure,
-            'min_t_accuracy_above_75fmeasure': min_t_accuracy_above_75fmeasure,
+            'min_t_perc_above_75fmeasure': min_t_perc_above_75fmeasure,
             'min_f_average_fmeasure': min_f_average_fmeasure,
-            'min_f_accuracy_above_75fmeasure': min_f_accuracy_above_75fmeasure}
+            'min_f_perc_above_75fmeasure': min_f_perc_above_75fmeasure}
 
 if __name__ == "__main__":
     document_a = [
@@ -219,10 +216,13 @@ if __name__ == "__main__":
         'label': 'entailment'},
         {'hypothesis_id': 'nda-16',
         'hypothesis': 'Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.',
-        'source_clause': "All Confidential Information in any form and any medium, including all copies thereof, disclosed to the Recipient shall be returned to UNHCR or destroyed: (a) if a business relationship.", 
-        'label': 'entailment'}
+        'source_clause': "Confidential Information in any form and any medium, including all copies thereof, disclosed to the Recipient shall be returned to UNHCR or destroyed: (a) if a business relationship.", 
+        'label': 'contradiction'}
         ]
-
-    print(document_level_metrics(document_a, document_b))
-
-# a datset is a list of documents
+    
+    doc_metrics = [document_level_metrics(document_a, document_b)]
+    print("Document level metrics:")
+    print(doc_metrics)
+    # a datset is a list of documents
+    print("Dataset level metrics:")
+    print(dataset_level_metrics(doc_metrics))
