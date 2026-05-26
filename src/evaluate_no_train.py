@@ -5,6 +5,7 @@ sys.path.append(parent_dir)
 # ====== If run from notebooks, the working directory is /notebooks =====
 
 import src.utils as utils
+from datetime import datetime
 ############################################
 import mlrun
 # Loads AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and MLRUN_AWS_ROLE_ARN
@@ -25,17 +26,21 @@ def evaluate_model(context,
                     prompt,
                     prompt_tag):
 
-    # Spin up endpoint
-    print('Spinning up DJL endpoint')
-    predictor, endpoint_name = utils.deploy_djl_contbat()
-    print('Spun up DJL endpoint')
-    #endpoint_name = "lmi-batch-Hermes-14B-FP8-2026-04-29-06-28-29-596"
 
     # Define prompt and datasets
     eval_data_key=dataset
     eval_data_tag=dataset_tag
     prompt_key=prompt
     prompt_tag=prompt_tag
+
+    # Define key
+    key = datetime.now().strftime("%Y%m%d_%H%M")
+
+    # Spin up endpoint
+    print('Spinning up DJL endpoint')
+    predictor, endpoint_name = utils.deploy_djl_contbat()
+    print('Spun up DJL endpoint')
+    #endpoint_name = "lmi-batch-Hermes-14B-FP8-2026-04-29-06-28-29-596"
 
     # Get all inferences and calculate metrics
     dataset_metrics, s3_output_path = utils.process_multiple_row_testdata(
@@ -44,7 +49,8 @@ def evaluate_model(context,
         eval_data_key,
         eval_data_tag,
         prompt_key,
-        prompt_tag 
+        prompt_tag,
+        key 
     )
     print('Inferences complete')
 
@@ -52,6 +58,7 @@ def evaluate_model(context,
     keys = [
         "count",
         "average_accuracy",
+        "average_fmeasure",
         "t_average_fmeasure",
         "t_average_perc_above_75fmeasure",
         "f_average_fmeasure",

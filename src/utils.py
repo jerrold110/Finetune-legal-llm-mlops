@@ -1,62 +1,80 @@
 """
 This file contains all the base modularised MLOps functions for use and reuse in different workflows.
 
-Run evaluation on existing model
+Run evaluation on base model
 Train new model and run evaluation
 Register model
-Deploy model
+Deploy model endpoint
 """
+# import sys
+# print(sys.executable)
+# exit(0)
+# torch has to be imported first before transformers and sagemaker, becuase they import torch internally.
+# this will initialise the DLLs first
+import torch
 
+import boto3
+from botocore.config import Config
 from sagemaker.djl_inference.model import DJLModel
 from sagemaker.utils import name_from_base
-from concurrent.futures import ThreadPoolExecutor
-import pyarrow.dataset as ds
-from botocore.config import Config
+
 from transformers import AutoTokenizer
+from datasets import Dataset
+
 import pyarrow as pa
+import pyarrow.dataset as ds
 import pandas as pd
-import boto3
-from datetime import datetime
+
 import json
-
-from src import utils_evaluate_model as evaluate_model
-
+from concurrent.futures import ThreadPoolExecutor
 
 from dotenv import load_dotenv
 load_dotenv()
 import os
-
-
+import mlrun
+##### Functions for evaluation and serving
+############################
 def deploy_djl_contbat(
-        HF_REVISION="ed47684b01a083f4129d367e1a55f2c1371ba5e3"
+        HF_REVISION="75875f970c359f89ad9e7d4dc86bf3c075c73c31"
         ):
     #-------------- Config -------------- 
-    image = f"763104351884.dkr.ecr.us-east-1.amazonaws.com/djl-inference:0.36.0-lmi24.0.0-cu129" # this works with batch config
-    role = "arn:aws:iam::975373241930:role/MLRunLLProj"
-    HF_MODEL_ID = "JerroldK/Hermes-4-14B-FP8-legal-contract"
-    INSTANCE_TYPE = "ml.g6e.2xlarge"    # 24 gb
+    # DJL images. Should look at entrypoint files in this image.
+    # https://aws.github.io/deep-learning-containers/reference/available_images/#djl-inference
+
+    image = f"763104351884.dkr.ecr.us-east-1.amazonaws.com/djl-inference:0.36.0-lmi24.0.0-cu129" # this works with async and roll batch
+    role = os.environ['MLRUN_AWS_ROLE_ARN']
+    HF_MODEL_ID = "JerroldK/Hermes-4-14B-contract-extractor"
+    INSTANCE_TYPE = "ml.g6e.2xlarge"
+    BATCH_SIZE = "10"
 
     # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
+    # https://github.com/aws-samples/sagemaker-genai-hosting-examples/blob/main/Llama3.1/Benchmarking-LMI-containers-Llama3p1-Instruct.ipynb
+
+    
     lmi_batch_config = {
         "HF_MODEL_ID": HF_MODEL_ID,
         #"HF_REVISION": # commit or branch
         "HF_TOKEN": os.environ['HF_TOKEN'], 
         "HF_REVISION": HF_REVISION,
-        "SERVING_ENGINE": "Python",
+        "SERVING_ENGINE": "Python", # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/conceptual_guide/lmi_engine.html
         "OPTION_ROLLING_BATCH": "disable", #vllm
         "OPTION_ASYNC_MODE":"true",
-        "TENSOR_PARALLEL_DEGREE": "max", # or "max"
-        "OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service",
+        "TENSOR_PARALLEL_DEGREE": "1", # or "max"
+        "OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service", # this is from article
         "SERVING_FAIL_FAST":"true",
+        "OPTION_QUANTIZE":"fp8",
+        # This is new
+        "VLLM_ATTENTION_BACKEND":"FLASH_ATTN", # TORCH_SDPA
         
         # The base model does not perform well when input is >8,000. Output is capped at 3,000
-        "OPTION_MAX_MODEL_LEN": "11000", 
+        "OPTION_MAX_MODEL_LEN":"11000", 
         
         # 64 is too aggressive for this instance. For 10k tokens, 32 is fine according to calculations, but still crashes
-        "OPTION_MAX_ROLLING_BATCH_SIZE": "15", 
+        "OPTION_MAX_ROLLING_BATCH_SIZE": BATCH_SIZE, 
         
         # Allow the endpoint to accept up to 200 requests into the queue at once
-        "MAX_CONCURRENT_REQUESTS": "15",
+        "MAX_CONCURRENT_REQUESTS": BATCH_SIZE,
+        "JOB_QUEUE_SIZE": '40',
 
         # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
         "OPTION_PREDICT_TIMEOUT": "600",    # 10 mins
@@ -64,10 +82,10 @@ def deploy_djl_contbat(
         
         # Important to enable this for caching the system prompt
         "OPTION_ENABLE_PREFIX_CACHING": "true",
-        #"OPTION_QUANTIZE": "fp8", 
         "OPTION_TRUST_REMOTE_CODE": "true",
         "OPTION_ENABLE_LORA": "false", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
     }
+    print(lmi_batch_config)
 
     # About 10-12 mins if successful
     model = DJLModel(
@@ -85,12 +103,6 @@ def deploy_djl_contbat(
     endpoint_name = predictor.endpoint_name
     print(endpoint_name)
     return predictor, endpoint_name
-
-def soft_search_json(inference):
-    start = inference.find('{')
-    end = inference.rfind('}')
-
-    return start, end
 
 # def soft_search_json(inference):
 #     start = inference.find('{')
@@ -207,18 +219,19 @@ def process_single_row_testdata(row, sys_prompt, parameters, endpoint_name, toke
 
 def process_multiple_row_testdata(project,
                                   endpoint_name,
-                                  eval_data_key="raw-proc-process-raw_test_data",
-                                  eval_data_tag="latest",
-                                  prompt_key="contract_extractor_prompt",
-                                  prompt_tag="latest"):
+                                  eval_data_key,
+                                  eval_data_tag,
+                                  prompt_key,
+                                  prompt_tag,
+                                  key):
+    
+    from src import utils_evaluate_model as evaluate_model
     # get input data handle data paths
     artifact = project.get_artifact(key=eval_data_key, tag=eval_data_tag)
     artifact_latest_s3_path = artifact.target_path
 
-    key = datetime.now().strftime("%Y%m%d_%H%M")
     print("s3_eval_path:")
     s3_eval_path = f"s3://legal-llama-data/evaluation/{key}/"
-    print()
     #s3_eval_output_path = s3_eval_path + "output.parquet"
     print(s3_eval_path)
     #print(s3_eval_output_path)
@@ -231,7 +244,7 @@ def process_multiple_row_testdata(project,
     print(invoc_config)
     print()
     
-    tokenizer = AutoTokenizer.from_pretrained("JerroldK/Hermes-4-14B-FP8-legal-contract")
+    tokenizer = AutoTokenizer.from_pretrained("JerroldK/Hermes-4-14B-contract-extractor")
 
     # get prompt template and prepare system prompt
     prompt_template = prompt_artifact.read_prompt()
@@ -243,9 +256,9 @@ def process_multiple_row_testdata(project,
         format="parquet")
     
     #small_test_dataset = test_dataset.to_table().to_pylist()[0:5]
-    test_dataset = test_dataset.to_table().to_pylist()[:15]
+    test_dataset = test_dataset.to_table().to_pylist()
 
-    MINI_BATCH_SIZE = 15  # match API limit
+    MINI_BATCH_SIZE = 10  # match API limit
     all_results = {"contract_data": [],
                    "inference_dict": [],
                    "reference_dict": [],
@@ -300,3 +313,345 @@ def process_multiple_row_testdata(project,
     
     return dataset_metrics, s3_eval_path
 
+##### Functions for training
+############################
+
+def prepare_train_datasets(project,
+                           train_dataset,
+                           train_dataset_tag,
+                           val_dataset,
+                           val_dataset_tag,
+                           test_dataset,
+                           test_dataset_tag,
+                           prompt,
+                           prompt_tag,
+                           key):
+    # train_uri = "store://datasets/finetune-legal-extractor/raw-proc-process-raw_train_data:latest"
+    # validation_uri = "store://datasets/finetune-legal-extractor/raw-proc-process-raw_validation_data:latest"
+    # key = datetime.now().strftime("%Y%m%d_%H%M")
+    train_uri = project.get_artifact(key=train_dataset, tag=train_dataset_tag).target_path
+    validation_uri = project.get_artifact(key=val_dataset, tag=val_dataset_tag).target_path
+    test_uri = project.get_artifact(key=test_dataset, tag=test_dataset_tag).target_path
+
+    ####################################################### HELPER FUNCTIONS
+    def get_dataset(data_uri):
+        data_pointer = mlrun.get_dataitem(data_uri)
+        s3_path = data_pointer.url
+        raw_dataset = ds.dataset(s3_path, format="parquet") # pyarrow FileSystemDataset
+
+        return raw_dataset
+
+    def get_sys_prompt(project,
+                    prompt_key="contract_extractor_prompt",
+                    prompt_tag="latest"):
+        
+        prompt_artifact = project.get_artifact(key=prompt_key, tag=prompt_tag)
+        prompt_template = prompt_artifact.read_prompt()
+        system_prompt = prompt_template[0]['content']
+
+        return system_prompt
+
+    def preprocess(batch, system_prompt, tokenizer, max_length=11000): # system + user <= 8000, assistant <= 3000
+        
+        system = system_prompt
+        user = batch["text"]
+        assistant = json.dumps(batch["inference"])
+
+        # 1. Full conversation text (system + user + assistant response)
+        # Chatml template
+        full_messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+            {"role": "assistant", "content": assistant},
+        ]
+        full_text = tokenizer.apply_chat_template(
+            full_messages, 
+            tokenize=False, 
+            add_generation_prompt=False,  # False: assistant response already in messages
+            max_length=max_length
+        )
+
+        # 2. Prompt text: everything the model is allowed to *see*, not generate
+        #    add_generation_prompt=True appends the assistant header (e.g. <|assistant|>)
+        prompt_messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+
+        prompt_text = tokenizer.apply_chat_template(
+            prompt_messages, 
+            tokenize=False, 
+            add_generation_prompt=True
+        )
+
+        # 3. Tokenize both
+        prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+        full_ids = tokenizer(full_text, add_special_tokens=False)["input_ids"]
+
+        # Sanity check: full_ids must start with prompt_ids
+        if full_ids[:len(prompt_ids)] != prompt_ids:
+            raise ValueError("Tokenization mismatch! Adjust your prompt split.")
+
+        # 4. Build labels: mask prompt, keep response
+        labels = [-100] * len(prompt_ids) + full_ids[len(prompt_ids):]
+
+        # 5. Truncate to max_length
+        def pad_trim(ids):
+            if len(ids) >= max_length:
+                return ids[:max_length]
+            return ids
+
+        input_ids = pad_trim(full_ids)
+        labels = pad_trim(labels)
+        # Replace pad positions in labels with -100 so padding doesn't contribute loss
+        labels = [lab if lab != tokenizer.pad_token_id else -100 for lab in labels]
+        attention_mask = [1 if tok != tokenizer.pad_token_id else 0 for tok in input_ids]
+
+        # format is lost during coversion from dict to datasetDict
+        # return (torch.tensor(input_ids),
+        #         torch.tensor(attention_mask),
+        #         torch.tensor(labels))
+        return (input_ids, attention_mask, labels, len(prompt_ids))
+
+    def preprocess_and_format_to_tensor(raw_dataset, system_prompt, tokenizer):
+        """
+        Converts pyarrow datasets into datasets.arrow_dataset.Dataset
+        """
+
+        processed_data = {
+            "input_ids":[],
+            "attention_mask": [],
+            "labels": []
+        }
+        count = 0
+        for batch in raw_dataset.to_batches():
+            # Process each pyarrow.RecordBatch
+            print(f"Processing batch with {batch.num_rows} rows")
+            for row in batch.to_pylist(): # 'row' is a standard Python dictionary
+                input_id, attention_mask, label, token_length = preprocess(row,
+                                                            system_prompt,
+                                                            tokenizer) 
+                # this is for testing on limited hardware because some samples go up to 12k tokens, causing OOM during training
+                # most samples are less than 9000
+                if token_length > 9000:
+                    print(count, f"Token skipped. Length: {token_length}")
+                    continue
+                else:
+                    processed_data['input_ids'].append(input_id)
+                    processed_data['attention_mask'].append(attention_mask)
+                    processed_data['labels'].append(label)
+
+                    count += 1
+                    print(count, f"Token length: {token_length}")
+
+        processed_data = Dataset.from_dict(processed_data)
+        #processed_data.set_format('torch', columns=['input_ids', 'attention_mask', 'labels']) # convert to pytorch tensors
+        print(type(processed_data))
+        return processed_data
+    
+    def simple_process(raw_dataset):
+        """
+        Converts pyarrow datasets into datasets.arrow_dataset.Dataset
+        """
+        processed_data = {
+            "text":[],
+            "inference": []
+        }
+        count = 0
+        for batch in raw_dataset.to_batches():
+            # Process each pyarrow.RecordBatch
+            print(f"Processing batch with {batch.num_rows} rows")
+            for row in batch.to_pylist():
+                processed_data['text'].append(row['text'])
+                processed_data['inference'].append(row['inference'])
+
+                count += 1
+                print(count)
+
+        processed_data = Dataset.from_dict(processed_data)
+        return processed_data
+    #######################################################
+
+    # Load datasets
+    pointer_train = mlrun.get_dataitem(train_uri)
+    train_pa = get_dataset(pointer_train.url)
+
+    pointer_validation = mlrun.get_dataitem(validation_uri)
+    validation_pa = get_dataset(pointer_validation.url)
+
+    pointer_test = mlrun.get_dataitem(test_uri)
+    test_pa = get_dataset(pointer_test.url)
+
+    # Get system prompt
+    system_prompt = get_sys_prompt(project,
+                                   prompt,
+                                   prompt_tag)
+
+    # Get tokenizer
+    tokenizer = AutoTokenizer.from_pretrained("JerroldK/Hermes-4-14B-contract-extractor")
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # Prepare paths
+    print("s3_eval_path:")
+    s3_input_path = f"s3://legal-llama-data/training/{key}/"
+    s3_train_input_path = s3_input_path + "train"
+    s3_validation_input_path = s3_input_path + "validation"
+    s3_test_input_path = s3_input_path + "test"
+    print(s3_train_input_path, s3_validation_input_path, s3_test_input_path)
+
+    # Upload raw train data
+    test_dd = simple_process(test_pa)
+    test_dd.save_to_disk(s3_test_input_path)
+    print("Test data processed and uploaded")
+
+    # Preprocess and upload data
+    val_dd = preprocess_and_format_to_tensor(validation_pa, system_prompt, tokenizer)
+    val_dd.save_to_disk(s3_validation_input_path)
+    print("Validation data preprocessed and uploaded")
+
+    train_dd = preprocess_and_format_to_tensor(train_pa, system_prompt, tokenizer)
+    train_dd.save_to_disk(s3_train_input_path)
+    print("Train data preprocessed and uploaded")
+
+    return s3_validation_input_path, s3_train_input_path, s3_test_input_path
+
+def train_model_get_outputs(
+    key,
+    model_repo,
+    model_revision,
+    epochs,
+    batch_grad_accumulation,
+    learning_rate,
+    lora_r,
+    lora_alpha,
+    early_stopping_threshold,
+):
+    from sagemaker.huggingface import HuggingFace
+    import matplotlib.pyplot as plt
+    import io
+
+    hftoken = os.environ['HF_TOKEN']
+    iam = os.environ['MLRUN_AWS_ROLE_ARN']
+    aws_no = os.environ['AWS_NO']
+    # print(hftoken); exit(0)
+    hyperparameters={
+        'model_repo':model_repo,
+        'model_revision':model_revision,
+        'hftoken':hftoken,
+        # This is only a small fraction of the parameters, but this is all I would change for my training strategy. This already produces very good training loss results
+        'epochs':epochs,
+        'batch_grad_accumulation':batch_grad_accumulation,
+        'learning_rate':learning_rate,
+        'lora_r':lora_r,
+        'lora_alpha':lora_alpha,
+        'early_stopping_threshold':early_stopping_threshold,
+        'key':key
+    }
+
+    # Parallelism config. Currently only data parallelism
+    distribution = {
+        "torch_distributed": {
+            "enabled": True
+        }
+    }
+
+    bucket_name = 'legal-llama-data'
+    
+    huggingface_estimator = HuggingFace(entry_point='train_multi.py',
+                                base_job_name='sm-hf-train',
+                                source_dir='./scripts',     # should this be from /notebook or from /src? because the working dir should be /notebook
+                                instance_type='ml.g6e.12xlarge',#
+                                instance_count=1,
+                                ###### max_wait should be equal to or greater than max_run in seconds
+                                use_spot_instances=True,
+                                max_wait=60*120,  # maximum time allowed for wait + run
+                                max_run=60*90,   # maximum time allowed to run
+                                checkpoint_s3_uri=f's3://legal-llama-data/training/{key}/checkpoints',
+                                ######
+                                role=iam,
+                                py_version='py311', # why is this required if the image states the version already
+                                image_uri=f'{aws_no}.dkr.ecr.us-east-1.amazonaws.com/smhf-torch2.5.1-flash-trans5.3.0-gpul4-py311-cu124:latest',
+                                hyperparameters=hyperparameters,
+                                distribution=distribution
+                                )
+    
+    # Add a dummy isatty method so SageMaker doesn't crash
+    import sys
+    if not hasattr(sys.stdout, 'isatty'):
+        sys.stdout.isatty = lambda: False
+    print("⚠️Hugging Face estimator training job starting...")
+    huggingface_estimator.fit()
+
+    print("⚠️Getting loss data and commit id")
+    # Get artifacts from training, and save loss curve as png on S3
+    s3_client = boto3.client('s3')
+    s3_lh_file_path = f'training/{key}/model_logs/training_history.json'
+    s3_hfid_file_path = f'training/{key}/hfh_commit/commit_oid.txt'
+
+    commit_oid = s3_client.get_object(
+        Bucket='legal-llama-data',
+        Key=s3_hfid_file_path,
+    )
+
+    commit_oid = commit_oid["Body"].read().decode("utf-8").strip()
+
+    dictionary = s3_client.get_object(
+        Bucket='legal-llama-data',
+        Key=s3_lh_file_path ,
+    )
+
+    log_data = json.loads(
+            dictionary["Body"].read().decode("utf-8")
+        )
+
+    train_loss = []
+    train_steps = []
+    eval_loss = []
+    eval_steps = []
+
+    for entry in log_data:
+        if 'loss' in entry:
+            train_loss.append(entry['loss'])
+            train_steps.append(entry['step'])
+            
+        # Evaluation loss is typically logged under 'eval_loss'
+        elif 'eval_loss' in entry:
+            eval_loss.append(entry['eval_loss'])
+            eval_steps.append(entry['step'])
+
+    print("⚠️PLotting loss graph")
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_steps, train_loss, marker='x', label='Training Loss', color='blue')
+
+    # Only plot eval loss if it exists
+    if eval_loss:
+        plt.plot(eval_steps, eval_loss, marker='x', label='Validation Loss', color='orange')
+
+    plt.title('Training and Validation Loss Curves')
+    plt.xlabel('Training Steps')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    #plt.show()
+
+    # 1. Save plot to an in-memory buffer
+    img_buffer = io.BytesIO()
+    plt.savefig(img_buffer, format='png', bbox_inches='tight')
+
+    # Reset the buffer's file pointer to the beginning so boto3 can read it
+    img_buffer.seek(0)
+
+    s3_graph_file_path = f'training/{key}/model_logs/training_curve.png'
+
+    try:
+        s3_client.upload_fileobj(img_buffer, bucket_name, s3_graph_file_path)
+        print(f"Successfully saved plot to s3://{bucket_name}/{s3_graph_file_path}")
+    except Exception as e:
+        print(f"Failed to upload to S3: {e}")
+    finally:
+        # Clean up memory
+        img_buffer.close()
+        plt.close()
+
+    return commit_oid, log_data

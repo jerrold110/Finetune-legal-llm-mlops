@@ -39,7 +39,7 @@ services:
       - nuclio-platform-config:/etc/nuclio/config
 
   mlrun-api:
-    image: "mlrun/mlrun-api:${TAG:-1.10.2}"
+    image: "mlrun/mlrun-api:${TAG:-1.10.3}"
     ports:
       - "8080:8080"
     environment:
@@ -56,14 +56,14 @@ services:
       # Disable K8s
       MLRUN_K8S_ENABLED: "false"  
       # let mlrun control nuclio resources
-      MLRUN_HTTPDB__PROJECTS__FOLLOWERS: "nuclio"
+      #MLRUN_HTTPDB__PROJECTS__FOLLOWERS: "nuclio"
     volumes:
       - "${SHARED_DIR:?err}:/data"
     networks:
       - mlrun
 
   mlrun-ui:
-    image: "mlrun/mlrun-ui:${TAG:-1.10.2}"
+    image: "mlrun/mlrun-ui:${TAG:-1.10.3}"
     ports:
       - "8060:8090"
     environment:
