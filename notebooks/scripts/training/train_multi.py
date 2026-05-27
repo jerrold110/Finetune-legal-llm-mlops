@@ -8,7 +8,6 @@ https://huggingface.co/docs/transformers/main_classes/trainer
 https://huggingface.co/docs/transformers/v4.42.0/perf_train_gpu_one#methods-and-tools-for-efficient-training-on-a-single-gpu
 https://huggingface.co/docs/transformers/v4.24.0/en/perf_train_gpu_one#efficient-training-on-a-single-gpu
 
-
 """
 
 print('========================================')
@@ -94,7 +93,7 @@ torch.cuda.set_device(local_rank)
 
 # Download dataset and tokenised data into memory (all processes do this)
 tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO,
-                                        max_length=10000,
+                                        #max_length=10000,
                                         token=hftoken)
 
 train_data = load_from_disk(f's3://legal-llama-data/training/{key}/train')
@@ -104,7 +103,7 @@ print('✅ Tokenizer and data load successful')
 
 # Since we have very little training data (~420 samples), the strategy is to bump up the epochs and rely on the validation dataset and early stopping to stop training. Keep batch size low 32-64 since there isn't much data
 # Arguments for notebook run on 1x48GB
-EVAL_STEPS = 1 # normal is 3
+EVAL_STEPS = 3 # normal is 3 for 5 epochs with large data. 1 for 1 epoch and small data
 
 training_args = TrainingArguments(
     output_dir="./sft_checkpoints",
@@ -204,8 +203,7 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=bnb_config,
     attn_implementation="sdpa", # "sdpa" "flash_attention_2"
     dtype=torch.bfloat16, # For any layer that is not quantized, load them in bfloat16 from the start. Qlora is mixed precision
-    token=hftoken,
-    device_map={"": local_rank} # Prevents GPU 0 OOM thundering herd
+    device_map={"": local_rank} # Tells accelerate to map entire model to gpu by local_rank. Prevents GPU 0 OOM thundering herd
 )
 
 model.config.use_cache = False # disable KV cache
@@ -244,6 +242,7 @@ lora_config = LoraConfig(
 
 # Apply the LoRA adapters to the model
 model = get_peft_model(model, lora_config)
+
 model.print_trainable_parameters()
 print('✅ Peft adapters inserted into model')
 
@@ -267,6 +266,7 @@ class InstructionTuningCollator:
         labels = [torch.tensor(feature["labels"], dtype=torch.int64) for feature in batch]
 
         # 2. Pad them efficiently using native PyTorch to the batch's max length
+        # This is right padding by default, which is correct
         input_ids_padded = torch.nn.utils.rnn.pad_sequence(
             input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
@@ -277,7 +277,8 @@ class InstructionTuningCollator:
             labels, batch_first=True, padding_value=-100
         )
 
-        # 3. Pad the resulting tensors to a multiple of 8 (if needed)
+        # 3. Pad the resulting tensors to a multiple of 8 
+        # Utilises Nvidia tensorcore optimisation
         if self.pad_to_multiple_of is not None:
             max_len = input_ids_padded.size(1)
             remainder = max_len % self.pad_to_multiple_of
@@ -315,9 +316,8 @@ trainer.train()
 print("Completed training ✅ ...")
 
 model.peft_config["default"].base_model_name_or_path = MODEL_REPO
-# Not unwrapping the model only saves the adapter
-trainer.save_model(LOCAL_LORA_SAVE_DIR)
-print(f"✅ Merged model saved locally to {LOCAL_LORA_SAVE_DIR}")
+model.config.name_or_path = MODEL_REPO
+model.config._name_or_path = MODEL_REPO
 
 ##########################################################################################
 # Uploads to S3 and HFH
@@ -325,6 +325,9 @@ print(f"✅ Merged model saved locally to {LOCAL_LORA_SAVE_DIR}")
 torch.distributed.barrier()
 
 if is_main_process:
+    # Not unwrapping the model only saves the adapter
+    trainer.save_model(LOCAL_LORA_SAVE_DIR)
+    print(f"✅ Adapters saved locally to {LOCAL_LORA_SAVE_DIR}")
 
     # Save the log history once
     log_history = trainer.state.log_history
@@ -349,18 +352,22 @@ if is_main_process:
     
     loss_data = [log for log in log_history if "loss" in log]
     df = pd.DataFrame(loss_data)
-    print(loss_data)
+    print(df)
+
+    eval_loss_data = [log for log in log_history if "eval_loss" in log]
+    df = pd.DataFrame(eval_loss_data)
     print(df)
     print('----------------------------------------------')
 
-    max_retries = 3
+    #max_retries = 3
 
     hfapi = HfApi(token=hftoken)
 
     commit_info = hfapi.upload_folder(
         folder_path=LOCAL_LORA_SAVE_DIR,
         repo_id=ADAPTER_REPO,
-        repo_type="model"
+        repo_type="model",
+        token=hftoken
     )
     print(commit_info)
     if hasattr(commit_info, "oid"):
