@@ -1,12 +1,18 @@
 """
-Most of this code was written by me, but some references help
+References
+
 https://github.com/huggingface/notebooks/blob/main/sagemaker/01_getting_started_pytorch/sagemaker-notebook.ipynb
 https://github.com/huggingface/notebooks/blob/main/sagemaker/05_spot_instances/sagemaker-notebook.ipynb
 https://github.com/huggingface/notebooks/blob/main/sagemaker/24_train_bloom_peft_lora/scripts/run_clm.py
+
 https://huggingface.co/docs/sagemaker/tutorials/sagemaker-sdk/training-sagemaker-sdk
 https://huggingface.co/docs/transformers/main_classes/trainer
 https://huggingface.co/docs/transformers/v4.42.0/perf_train_gpu_one#methods-and-tools-for-efficient-training-on-a-single-gpu
 https://huggingface.co/docs/transformers/v4.24.0/en/perf_train_gpu_one#efficient-training-on-a-single-gpu
+
+
+Additional:
+https://huggingface.co/docs/transformers/v5.7.0/en/hpo_train?backends=Optuna#define-the-search-space
 
 """
 
@@ -92,8 +98,8 @@ torch.cuda.set_device(local_rank)
 # TRAINING
 
 # Download dataset and tokenised data into memory (all processes do this)
+# Truncation should be done in preprocessing
 tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO,
-                                        #max_length=10000,
                                         token=hftoken)
 
 train_data = load_from_disk(f's3://legal-llama-data/training/{key}/train')
@@ -214,27 +220,27 @@ print('✅ Model and flash attention load successful')
 model = prepare_model_for_kbit_training(model,
                                         use_gradient_checkpointing=True)
 
-target_modules=[
-        "q_proj",
-        "v_proj",
-        "o_proj",
-        "k_proj",
-        "up_proj",
-        "down_proj",
-        "gate_proj",
-    ]
+# target_modules=[
+#         "q_proj",
+#         "v_proj",
+#         "o_proj",
+#         "k_proj",
+#         "up_proj",
+#         "down_proj",
+#         "gate_proj",
+#     ]
 
-small=[
-        "q_proj",
-        "v_proj",
-        "o_proj",
-        "k_proj"
-    ]
+# small=[
+#         "q_proj",
+#         "v_proj",
+#         "o_proj",
+#         "k_proj"
+#     ]
 
 lora_config = LoraConfig(
     r=lora_r, # Rank of the adapter (higher = more capacity, more memory)
     lora_alpha=lora_alpha, # Reported that training improves as alpha increases relative to r
-    target_modules=small, # identical to all-linear, should be 64M trainable don't load lora twice
+    target_modules="all-linear", # identical to all-linear, should be 64M trainable don't load lora twice
     lora_dropout=0.05,
     bias="none",
     task_type="CAUSAL_LM"
@@ -374,7 +380,7 @@ if is_main_process:
         print(f"oid: {commit_info.oid}")
     if hasattr(commit_info, "commit_url"):
         print(f"commit_info: {commit_info.commit_url}")
-    print(f"✅ Merged model saved on HF model hub to {MODEL_REPO} commit {commit_info.oid}")
+    print(f"✅ Adapter saved on HF model hub to {MODEL_REPO} commit {commit_info.oid}")
 
     # Save the trainer logs with the loss data to S3
     log_data_json = json.dumps(log_history, indent=4, default=str)

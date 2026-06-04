@@ -71,9 +71,11 @@ def get_hypothesis_for_id(reference:list, hypothesis_id:str):
     for item in reference:
         if item['hypothesis_id'] == hypothesis_id:
             return item
+    print(f"Hypothesis {hypothesis_id} not found in document:")
+    print(reference)
     return None
 
-def document_level_metrics(references:list, inferences:list):
+def document_level_metrics(references:list[dict], inferences:list[dict]):
     accuracy = None
     t_average_fmeasure = []
     f_average_fmeasure = []
@@ -206,24 +208,25 @@ def dataset_level_metrics(dataset_metrics_list:list):
             'min_f_perc_above_75fmeasure': min_f_perc_above_75fmeasure}
 
 if __name__ == "__main__":
+    # Reference document
     document_a = [
         {'hypothesis_id': 'nda-11', 
-        'hypothesis': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
+        'source_clause': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
         'source_clause': "The Recipient will not copy or reproduce the Confidential Information except as reasonably required for the purposes contemplated in this Agreement, and will ensure that any confidentiality or other proprietary rights notices on the Confidential Information are reproduced on all copies.", 
         'label': 'entailment'},
         {'hypothesis_id': 'nda-16',
-        'hypothesis': 'Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.',
+        'source_clause': 'Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.',
         'source_clause': "All Confidential Information in any form and any medium, including all copies thereof, disclosed to the Recipient shall be returned to UNHCR or destroyed: (a) if a business relationship is not entered into with UNHCR on or before the date which is three (3) months after the date both Parties have signed the Agreement; or (b) promptly upon request by the UNHCR at any time.", 
         'label': 'contradiction'}
         ]
 
     document_b = [
         {'hypothesis_id': 'nda-11', 
-        'hypothesis': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
+        'source_clause': "Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.", 
         'source_clause': "The Recipient will not copy or reproduce the Confidential Information except as reasonably required for the purposes contemplated in this Agreement, and will ensure that any confidentiality or other proprietary rights notices on the Confidential Information are reproduced on all copies.", 
         'label': 'entailment'},
         {'hypothesis_id': 'nda-16',
-        'hypothesis': 'Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.',
+        'source_clause': 'Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.',
         'source_clause': "Confidential Information in any form and any medium, including all copies thereof, disclosed to the Recipient shall be returned to UNHCR or destroyed: (a) if a business relationship.", 
         'label': 'contradiction'}
         ]
@@ -237,4 +240,5 @@ if __name__ == "__main__":
     dataset_metric = dataset_level_metrics(l_doc_metrics)
     print("Dataset level metrics:")
     pprint.pprint(dataset_metric, indent=4)
+    print(dataset_metric)
 

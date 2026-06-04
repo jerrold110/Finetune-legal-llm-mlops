@@ -21,38 +21,64 @@ project = mlrun.load_project(name='finetune-legal-extractor', context="../") # p
 ############################################
 
 def evaluate_model(context,
-                    dataset,
-                    dataset_tag,
-                    prompt,
-                    prompt_tag):
-
-
-    # Define prompt and datasets
-    eval_data_key=dataset
-    eval_data_tag=dataset_tag
-    prompt_key=prompt
-    prompt_tag=prompt_tag
-
+                   test_dataset,
+                   test_dataset_tag,
+                   prompt,
+                   prompt_tag):
+    
     # Define key
     key = datetime.now().strftime("%Y%m%d_%H%M")
 
-    # Spin up endpoint
-    print('Spinning up DJL endpoint')
-    predictor, endpoint_name = utils.deploy_djl_contbat()
-    print('Spun up DJL endpoint')
-    #endpoint_name = "lmi-batch-Hermes-14B-FP8-2026-04-29-06-28-29-596"
-
-    # Get all inferences and calculate metrics
-    dataset_metrics, s3_output_path = utils.process_multiple_row_testdata(
+    # Prepare data
+    utils.prepare_notrain_datasets(
         project,
-        endpoint_name,
-        eval_data_key,
-        eval_data_tag,
-        prompt_key,
+        test_dataset,
+        test_dataset_tag,
+        prompt,
         prompt_tag,
-        key 
+        key
     )
-    print('Inferences complete')
+
+    # Run eval script as a training job
+    dataset_metrics, s3_output_path = utils.evaluate_model_base(
+        key,
+        project,
+        "JerroldK/Hermes-4-14B-contract-extractor", # model_repo
+        "75875f970c359f89ad9e7d4dc86bf3c075c73c31", # model_revision
+        prompt,
+        prompt_tag
+    )
+    print('Inferences complete for no-train')
+    print(dataset_metrics)
+
+    # This was for the old evaluation method
+    # # Define prompt and datasets
+    # eval_data_key=dataset
+    # eval_data_tag=dataset_tag
+    # prompt_key=prompt
+    # prompt_tag=prompt_tag
+
+    # # Spin up endpoint
+    # print('Spinning up DJL endpoint')
+    # predictor, endpoint_name = utils.deploy_endpoint_base(
+    #     HF_REVISION="db50a31b65b72bdefa2731a12990df000c652364"
+    # )
+    # print('Spun up DJL endpoint')
+    # endpoint_name = "lmi-batch-Hermes-14B-FP8-2026-04-29-06-28-29-596"
+    # # Get all inferences and calculate metrics
+    # dataset_metrics, s3_output_path = utils.process_multiple_row_testdata(
+    #     project,
+    #     endpoint_name,
+    #     eval_data_key,
+    #     eval_data_tag,
+    #     prompt_key,
+    #     prompt_tag,
+    #     key 
+    # )
+    # Delete the endpoint
+    # predictor.delete_model()
+    # predictor.delete_endpoint()
+    
 
     # Save experiment metrics to MLRun
     keys = [
@@ -74,10 +100,6 @@ def evaluate_model(context,
         context.log_result(k, dataset_metrics[k])
 
     print("Experiment logged")
-
-    # Delete the endpoint
-    predictor.delete_model()
-    predictor.delete_endpoint()
 
     # anything you return will be accessible under RunObject.outputs()['return']
     return {"s3_output_path": s3_output_path}

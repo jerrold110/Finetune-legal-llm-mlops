@@ -45,23 +45,22 @@ def evaluate_model_train(context,
     # Define key
     key = datetime.now().strftime("%Y%m%d_%H%M")
 
-    # Preprocess data
-    # utils.prepare_train_datasets(
-    #     project,
-    #     train_dataset,
-    #     train_dataset_tag,
-    #     val_dataset,
-    #     val_dataset_tag,
-    #     test_dataset,
-    #     test_dataset_tag,
-    #     prompt,
-    #     prompt_tag,
-    #     key
-    # )
-    key = "20260523_1039"
+    # Preprocess train/eval data, process test data
+    utils.prepare_train_datasets(
+        project,
+        train_dataset,
+        train_dataset_tag,
+        val_dataset,
+        val_dataset_tag,
+        test_dataset,
+        test_dataset_tag,
+        prompt,
+        prompt_tag,
+        key
+    )
 
     # Train model and create loss graph
-    commit_oid, log_data = utils.train_model_get_outputs(
+    commit_oid, log_data, s3_output_path = utils.train_model_get_outputs(
             key=key,
             model_repo="JerroldK/Hermes-4-14B-contract-extractor",
             model_revision="75875f970c359f89ad9e7d4dc86bf3c075c73c31",
@@ -72,12 +71,46 @@ def evaluate_model_train(context,
             lora_alpha=lora_alpha,
             early_stopping_threshold=early_stopping_threshold,
         )
+    print("Trainer log data:")
+    print(log_data)
 
-    # Evaluate model
-        # Do something with commid oid
-        # Load model, compress, evaluate
+    # key, commit_oid = "20260603_1558", "39c89f599964a53e6dc2e11c273a6d2d6ad52a2e"
+    # Evaluate model with HF commit oid
+    dataset_metrics, s3_output_path = utils.evaluate_model_lora(
+        key,
+        project,
+        "JerroldK/Hermes-4-14B-contract-extractor", # model_repo
+        "75875f970c359f89ad9e7d4dc86bf3c075c73c31", # model_revision
+        prompt,
+        prompt_tag,
+        "JerroldK/H4-14b-contract-extractor-adapter", # adapter_repo
+        commit_oid # adapter_revision
+    )
 
-    # Register results in the job run
+    # Register results in the job run to MLRun
+    keys = [
+        "count",
+        "average_accuracy",
+        "average_fmeasure",
+        "t_average_fmeasure",
+        "t_average_perc_above_75fmeasure",
+        "f_average_fmeasure",
+        "f_average_perc_above_75fmeasure",
+        "min_accuracy",
+        "min_t_average_fmeasure",
+        "min_t_perc_above_75fmeasure",
+        "min_f_average_fmeasure",
+        "min_f_perc_above_75fmeasure",
+    ]
+
+    for k in keys:
+        context.log_result(k, dataset_metrics[k])
+
+    print("Experiment logged")
+
+    # anything you return will be accessible under RunObject.outputs()['return']
+    return {"commit_oid:": commit_oid,
+            "s3_output_path": s3_output_path}
 
 if __name__ == "__main__":
     evaluate_model_train(train_dataset="raw-proc-process-raw_train_data",
