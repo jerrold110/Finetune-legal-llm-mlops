@@ -79,7 +79,6 @@ def evaluate_model(context,
     # predictor.delete_model()
     # predictor.delete_endpoint()
     
-
     # Save experiment metrics to MLRun
     keys = [
         "count",

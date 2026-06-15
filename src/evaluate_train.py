@@ -76,7 +76,7 @@ def evaluate_model_train(context,
 
     # key, commit_oid = "20260603_1558", "39c89f599964a53e6dc2e11c273a6d2d6ad52a2e"
     # Evaluate model with HF commit oid
-    dataset_metrics, s3_output_path = utils.evaluate_model_lora(
+    dataset_metrics, s3_output_path_metric = utils.evaluate_model_lora(
         key,
         project,
         "JerroldK/Hermes-4-14B-contract-extractor", # model_repo
@@ -110,6 +110,7 @@ def evaluate_model_train(context,
 
     # anything you return will be accessible under RunObject.outputs()['return']
     return {"commit_oid:": commit_oid,
+            "adapter_repo": "JerroldK/H4-14b-contract-extractor-adapter",
             "s3_output_path": s3_output_path}
 
 if __name__ == "__main__":

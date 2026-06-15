@@ -3,15 +3,23 @@ This file contains all the modularised MLOps components for use and reuse in dif
 
 Each MLOps pipeline is a combination of different components strung together to create a unique pipeline.
 
-Pipelines (in this file): 
-Run evaluation on base model
-Train new model and run evaluation on fine-tuned model
+Internal Pipelines: 
+Experiment: Run evaluation on base model
+Experiment: Train new model and run evaluation on fine-tuned model
 Register model in model registry
-Deploy model as sagemaker endpoint
+
+External pipelines:
+Deploy SM model endpoint
+Update SM model endpoint
+Deploy inference component adapter (LoRA adapter)
+Update Inference component adapter (Routing gateway refer to docs)
 
 Pipelines not in this file:
-Process and register train/validation/test datasets
+Register train/validation/test datasets
+Data processing with update operations on datasets
 Register prompt template and invocation configuration
+Reinforcement learning fine-tuning pipelines
+
 """
 # import sys
 # print(sys.executable)
@@ -22,8 +30,6 @@ import torch
 
 import boto3
 from botocore.config import Config
-
-from sagemaker.utils import name_from_base
 
 from transformers import AutoTokenizer
 from datasets import Dataset
@@ -39,6 +45,9 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 import mlrun
+
+from src import utils_evaluate_model as evaluate_model
+#import utils_evaluate_model as evaluate_model # for tests
 
 ##### Functions for training and evaluation
 ############################
@@ -483,7 +492,7 @@ def train_model_get_outputs(
     
     huggingface_estimator = HuggingFace(entry_point='train_multi.py',
                                 base_job_name='sm-hf-train',
-                                source_dir='./scripts/training', # working dir is /notebooks if called from a notebook
+                                source_dir='../src/scripts/training', # working dir is /notebooks if called from a notebook
                                 instance_type='ml.g6e.12xlarge',
                                 instance_count=1,
                                 ###### max_wait should be equal to or greater than max_run in seconds
@@ -625,7 +634,7 @@ def evaluate_model_lora(
         entry_point='quant_eval_vllm_lora.py',
         base_job_name='sm-hf-lora-eval',
         source_dir='../src/scripts/evaluate',
-        instance_type='ml.g6e.4xlarge',
+        instance_type='ml.g6e.2xlarge',
         instance_count=1,
         ###### max_wait should be equal to or greater than max_run in seconds
         use_spot_instances=True,
@@ -678,81 +687,249 @@ https://docs.djl.ai/master/docs/demos/aws/sagemaker/large-model-inference/sample
 https://docs.djl.ai/master/docs/demos/aws/sagemaker/large-model-inference/sample-llm/stateful_inference_gemma3_4b_lora.html#invoke-adapter-ic
 
 """
-def deploy_endpoint_base(
-        HF_REVISION="75875f970c359f89ad9e7d4dc86bf3c075c73c31"
-        ):
+def deploy_lora_model(
+        batch_size:str = "4",
+        max_model_len:str = "7150",
+        batch_tokens:str = "28600"
+    ):
     
-    from sagemaker.djl_inference.model import DJLModel
+    #from sagemaker.djl_inference.model import DJLModel
+    from sagemaker import Model
+    from sagemaker.compute_resource_requirements.resource_requirements import ResourceRequirements
+    from sagemaker.utils import name_from_base # appends datetime
+    from sagemaker.session import Session 
+    import sagemaker
+    """
+    Sagemaker model endpoints LMI is unstable and highly prone to memory leaks as performance tests have shown. Theoretically a batch size of up to 19 is possible, but tests show that a mediocre size of 4 is stable in production workloads - even with Flashinfer backend. Using g6e.2xlarge
+
+    Based on the math at (6000+3000) and size of KV cache, 48GB VRAM, maximum batch size under memory limit can be 19; exluding activations/attention artifacts/cache updates. However throughput flattens as batch size increases and we reach a compute bottleneck during prefill (or some other hardware limitation).
 
     """
-    1. Defines a model class (Sagemaker.Model or Sagemaker.djl_inference.model.DJLModel)
-    2. Deploys the model with instance type & instance count
 
-    Notes: 
-    Scaling policies can be attach to a model when it has been registered. https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling-add-code-apply.html
+    """
+    Model required an invocataion component adapter, unlike a base standalone model
+
+    Autoscaling: 
+    Scaling policies can be attach to a model after the endpoint has been deployed. https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling-add-code-apply.html
+
+    Realtime endpoint adapters:
+    https://docs.djl.ai/master/docs/demos/aws/sagemaker/large-model-inference/sample-llm/multi_lora_gemma3_4b.html#clean-up-resources
+    https://docs.aws.amazon.com/sagemaker/latest/dg/realtime-endpoints-adapt.html
     
     """
-    #-------------- Config -------------- 
+
+    region = "us-east-1"
+    boto_session = boto3.Session(region_name=region)
+    sagemaker_session = Session(boto_session=boto_session)
+
     # DJL images. Should look at entrypoint files in this image.
     # https://aws.github.io/deep-learning-containers/reference/available_images/#djl-inference
-
-    image = f"763104351884.dkr.ecr.us-east-1.amazonaws.com/djl-inference:0.36.0-lmi24.0.0-cu129" # this works with async and roll batch
+    image = f"763104351884.dkr.ecr.{region}.amazonaws.com/djl-inference:0.36.0-lmi24.0.0-cu129" # this works with async and roll batch
     role = os.environ['MLRUN_AWS_ROLE_ARN']
     HF_MODEL_ID = "JerroldK/Hermes-4-14B-contract-extractor"
-    INSTANCE_TYPE = "ml.g6e.4xlarge" # originally 2xlarge
-    BATCH_SIZE = "10"
+    HF_REVISION="75875f970c359f89ad9e7d4dc86bf3c075c73c31"
+    INSTANCE_TYPE = "ml.g6e.2xlarge" # or ml.g6e.12xlarge
+
+    BATCH_SIZE = batch_size
+    MAX_MODEL_LEN = max_model_len
+    BATCH_TOKENS = batch_tokens
+
+    # lmi_batch_config = {
+    #     "HF_MODEL_ID": HF_MODEL_ID,
+    #     "HF_TOKEN": os.environ['HF_TOKEN'], 
+    #     "HF_REVISION": HF_REVISION,
+
+    #     "SERVING_ENGINE": "Python", # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/conceptual_guide/lmi_engine.html
+    #     "OPTION_ROLLING_BATCH": "vllm", #vllm disable
+    #     "OPTION_ASYNC_MODE":"false",
+    #     "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
+    #     #"OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service", # this is from article
+    #     "OPTION_QUANTIZE":"fp8",
+    #     "OPTION_ENABLE_PREFIX_CACHING": "false", # caching the system prompt
+
+    #     "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
+    #     "MAX_BATCH_SIZE": BATCH_SIZE, # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/starting-guide.html
+    #     "MAX_CONCURRENT_REQUESTS": BATCH_SIZE,
+    #     "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
+    #     # --- ADVANCED SETTINGS -----
+    #     # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
+    #     "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS, "OPTION_MAX_ROLLING_BATCH_PREFILL_TOKENS": BATCH_TOKENS,# Hard cap on the batch size to KV capacity pressure control which is a common cause of stalling/crashing
+    #     "VLLM_ATTENTION_BACKEND":"TORCH_SDPA", # TORCH_SDPA  FLASH_ATTN
+        
+    #     # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
+    #     "OPTION_PREDICT_TIMEOUT": str(60*10),    # 10 mins
+    #     "OPTION_MODEL_LOADING_TIMEOUT": str(60*20), # 20 mins
+    #     "OPTION_TRUST_REMOTE_CODE": "true", # security
+    #     "SERVING_FAIL_FAST":"true",
+        
+    #     "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
+    #     "OPTION_MAX_LORA_RANK": "16",
+    #     "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
+    #     "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
+    # }
 
     lmi_batch_config = {
         "HF_MODEL_ID": HF_MODEL_ID,
-        #"HF_REVISION": # commit or branch
         "HF_TOKEN": os.environ['HF_TOKEN'], 
         "HF_REVISION": HF_REVISION,
 
-        "SERVING_ENGINE": "Python", # 
-        "OPTION_ROLLING_BATCH": "disable", #vllm
+        "SERVING_ENGINE": "Python", # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/conceptual_guide/lmi_engine.html
+        "OPTION_ROLLING_BATCH": "disable", #vllm disable
         "OPTION_ASYNC_MODE":"true",
         "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
         "OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service", # this is from article
-        "SERVING_FAIL_FAST":"true",
         "OPTION_QUANTIZE":"fp8",
-        "VLLM_ATTENTION_BACKEND":"FLASH_ATTN", # TORCH_SDPA
-        
-        # The base model does not perform well when input is >8,000. Output is capped at 3,000
-        "OPTION_MAX_MODEL_LEN":"11000", 
+        "OPTION_ENABLE_PREFIX_CACHING": "false", # caching the system prompt
 
-        # 64 is too aggressive for this instance. For 10k tokens, 32 is fine according to calculations, but still crashes
-        "OPTION_MAX_ROLLING_BATCH_SIZE": BATCH_SIZE, # This should be disabled for async
+        "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
+        "MAX_BATCH_SIZE": BATCH_SIZE, # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/starting-guide.html
         "MAX_CONCURRENT_REQUESTS": BATCH_SIZE,
-        "JOB_QUEUE_SIZE": '500', # Default is 1000
-        # Important to enable this for caching the system prompt
-        "OPTION_ENABLE_PREFIX_CACHING": "true",
-
+        "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
+        # --- ADVANCED SETTINGS -----
+        # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
+        "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS,"OPTION_MAX_ROLLING_BATCH_PREFILL_TOKENS": BATCH_TOKENS,# Hard cap on the batch size to KV capacity pressure control which is a common cause of stalling/crashing
+        
+        # https://docs.vllm.ai/en/v0.8.3/serving/env_vars.html
+        "VLLM_ATTENTION_BACKEND":"FLASHINFER", # TORCH_SDPA  FLASH_ATTN
+        
         # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
         "OPTION_PREDICT_TIMEOUT": str(60*10),    # 10 mins
         "OPTION_MODEL_LOADING_TIMEOUT": str(60*20), # 20 mins
         "OPTION_TRUST_REMOTE_CODE": "true", # security
+        "SERVING_FAIL_FAST":"true",
         
-        "OPTION_ENABLE_LORA": "false", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
-        "OPTION_PARALLEL_LOADING": "false"
+        "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
+        "OPTION_MAX_LORA_RANK": "16",
+        "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
+        "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
     }
     print(lmi_batch_config)
 
     # About 10-12 mins if successful
-    model = DJLModel(
+    model = Model(
         env=lmi_batch_config,
         role=role,
         image_uri=image,
+        sagemaker_session=sagemaker_session
         )
+    
+    endpoint_name = name_from_base("lmi-Hermes-FP8")
+    base_ic_name = "base-" + endpoint_name
 
+    print("Deploying model endpoint...")
     predictor = model.deploy(
         initial_instance_count=1,
         instance_type=INSTANCE_TYPE,
-        endpoint_name=name_from_base("lmi-batch-Hermes-14B-FP8"),
+        endpoint_name=endpoint_name,
+
+        endpoint_type=sagemaker.enums.EndpointType.INFERENCE_COMPONENT_BASED,
+        inference_component_name=base_ic_name,
+        resources = ResourceRequirements(requests={"num_accelerators": 1, "memory": 256, "copies": 1}) # Resource requirements for inference component object
         )
 
-    endpoint_name = predictor.endpoint_name
-    print(endpoint_name)
-    return predictor, endpoint_name
+    #endpoint_name = predictor.endpoint_name # unavailable for lora endpoint
+
+    print(f"✅ Deployed model (LoRA): {endpoint_name}, {base_ic_name}")
+
+    # Attach autoscaling policy to base_ic_name
+          
+    return endpoint_name, base_ic_name
+
+def deploy_lora_adapter(
+    key,
+    endpoint_name,
+    base_ic_name,
+    adapter_revision
+):
+    from huggingface_hub import HfFileSystem
+    import tarfile
+    import io
+    import sagemaker
+    from sagemaker.session import Session
+    """
+    
+    """
+
+    REGION = "us-east-1"
+    BUCKET = "legal-llama-data"
+    
+    ADAPTER_ID = "JerroldK/H4-14b-contract-extractor-adapter"
+    ADAPTER_FILENAME = "adapter.tar.gz"
+    S3_KEY = f"Adapters/{key}/{ADAPTER_FILENAME}"
+    S3_URI = f's3://{BUCKET}/{S3_KEY}'
+
+    ic_adapter_name = f'adapter-{endpoint_name}'
+
+    # ---------------- FORCE REGION
+    boto_session = boto3.Session(region_name=REGION)
+    s3_client = boto_session.client("s3")
+    sm_client = boto_session.client("sagemaker")
+    sess = Session(boto_session=boto_session)
+
+    # ------------ Compress and upload adapter to S3
+    fs = HfFileSystem(token=os.environ['HF_TOKEN'])
+
+    # Create an in-memory buffer for the tar archive
+    tar_buffer = io.BytesIO()
+    print(f"Fetching files from '{ADAPTER_ID}' {adapter_revision} and building {ADAPTER_FILENAME} in memory...")
+
+    # Open the tar buffer for writing in gzip mode
+    with tarfile.open(fileobj=tar_buffer, mode="w:gz") as tar:
+        
+        # fs.find() recursively gets all files in the Hugging Face repo
+        for file_path in fs.find(
+            path=ADAPTER_ID, 
+            revision=adapter_revision
+            ):
+            
+            # Read the file's bytes directly from Hugging Face
+            with fs.open(file_path, "rb") as f:
+                file_data = f.read()
+                
+            file_obj = io.BytesIO(file_data)
+
+            # Strip the repo name from the path so it extracts cleanly without user/repo_name@hash/
+            #relative_path = file_path.replace(f"{ADAPTER_ID}/", "")
+            relative_path = "/".join(file_path.split("/")[2:]) # "/".join() is for nested folders
+            print(f"  -> Packaging: {file_path} as {relative_path}")
+            # Create tar file metadata
+            tarinfo = tarfile.TarInfo(name=relative_path)
+            tarinfo.size = len(file_data)
+            # Add the file to the in-memory tar archive
+            tar.addfile(tarinfo, fileobj=file_obj)
+
+    # Rewind the buffer to the beginning before uploading
+    tar_buffer.seek(0)
+
+    print(f"⚠️ Uploading directly to {S3_URI}...")
+
+    # Stream the buffer directly to S3
+    s3_client.upload_fileobj(tar_buffer, BUCKET, S3_KEY)
+
+    print("✅ Success! Transfer complete without touching the disk.")
+
+    # ------------- Create inference component for model endpoint
+    sm_client = boto3.client(service_name="sagemaker")
+    #sm_runtime = boto3.client(service_name="sagemaker-runtime")
+    sess = sagemaker.session.Session()
+    #iam = os.environ['MLRUN_AWS_ROLE_ARN']
+
+    adapter_inference = sm_client.create_inference_component(
+        InferenceComponentName = ic_adapter_name,   # extension ot endpoint_name
+        EndpointName = endpoint_name,
+        Specification={
+            "BaseInferenceComponentName": base_ic_name,
+            "Container": {
+                "ArtifactUrl": S3_URI
+            },
+        },
+    )
+    sess.wait_for_inference_component(ic_adapter_name)
+
+    print(f"✅ Created Adapter inference component {ic_adapter_name} for endpoint {endpoint_name} ARN: {adapter_inference['InferenceComponentArn']}")
+
+    return adapter_inference, ic_adapter_name
+
 
 #### Online load testing and evaluation
 # def soft_search_json(inference):
@@ -761,18 +938,40 @@ def deploy_endpoint_base(
 
 #     return start, end
 
-def invoke_model(smr_client, sys_prompt, parameters, contract_data, endpoint_name, tokenizer, id=""):
+def invoke_model(
+    smr_client, 
+    sys_prompt, 
+    parameters, 
+    contract_data, 
+    endpoint_name,
+    adapter_name,
+    tokenizer, 
+    id="",
+    max_prompt_l=5000
+):
     """
+    change max_token_length parameter outside this function before passing parameters
     id is an optional identifier to track to inhouse data
     """
-    # Format into the chatml template
-    chatml_prompt = (
-    "<|im_start|>system\n"
-    f"{sys_prompt}<|im_end|>\n"
-    "<|im_start|>user\n"
-    f"{contract_data}<|im_end|>\n"
-    "<|im_start|>assistant\n"
+    print(parameters)
+
+    prompt = [
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": contract_data},
+    ]
+
+    chatml_prompt = tokenizer.apply_chat_template(
+        prompt, 
+        tokenize=False, 
+        add_generation_prompt=True # this is important to append the assistant tag
     )
+
+    # ignore inference if contract_data is too long
+    tokens = tokenizer.encode(chatml_prompt)
+    print(f"Document {id} prompt is {len(tokens)} tokens")
+    if len(tokens) >= max_prompt_l:
+        print(f"Document {id} prompt is over {max_prompt_l} tokens and ignored")
+        return -1
 
     chatml = {
     "inputs": chatml_prompt,
@@ -787,29 +986,32 @@ def invoke_model(smr_client, sys_prompt, parameters, contract_data, endpoint_nam
             Body=json.dumps(chatml),
             ContentType="application/json",
             Accept="application/json",
+            InferenceComponentName=adapter_name # remove this line for base model endpoint invocation
         )
-
-        full_response = ""
-        tokens = tokenizer.encode(full_response)
-        if len(tokens) > 3900:
-            print(f"Warning: Document {id} response is over 3900 tokens")
-
         # Process streaming response
+        full_response = ""
         for event in resp['Body']:
             if 'PayloadPart' in event:
                 payload = event['PayloadPart']['Bytes'].decode('utf-8')
                 full_response += payload
+
+        tokens = tokenizer.encode(full_response)
+        l_t = len(tokens)
+        print(f'Doc {id} response tokens: {l_t}')
+        # if l_t > 4900:
+        #     print(f"Warning: Document {id} response is over 4900 tokens")
     except Exception as e:
-        print(f"Error with doc {id} ", e)
-    #print(f"Completed invocation stream on id {id}")
+        print(f"Error with doc {id} part A", e)
+
     try:
         full_response_dict = json.loads(full_response)
     except Exception as e:
-        print(f"Error Document {id} during json.load() line 51:", e)
-        #print(full_response)
+        print(f"Error Document {id} during json.load() Part B:", e)
+        print(full_response)
         return -1
 
     # At this point we have not reached LLM generated tokens yet
+    print("---->", full_response_dict)
     inference = full_response_dict['generated_text']
     # if "<|im_end|>" in inference:   # this should not happen if we enforce json formatter
     #     inference = inference.replace("<|im_end|>", "").strip()
@@ -819,15 +1021,22 @@ def invoke_model(smr_client, sys_prompt, parameters, contract_data, endpoint_nam
     try:
         # start, end = soft_search_json(inference)
         # inference = inference[start:end+1]
-        inference_dict = json.loads(inference)['hypotheses']
+        inference_dict = json.loads(inference)['Hypotheses']
     except Exception as e:
-        print(f"Error Document {id} during json.load() line 67:", e)
+        print(f"Error Document {id} during json.load() part C:", e)
         print(inference)
         return -1
 
     return inference_dict
 
-def process_single_row_testdata(row, sys_prompt, parameters, endpoint_name, tokenizer):
+def process_single_row_testdata(
+    row, 
+    sys_prompt, 
+    parameters, 
+    endpoint_name,
+    adapter_name,
+    tokenizer
+):
     # Create a new session and client
     custom_config = Config(
         read_timeout=900, # 15 mins
@@ -842,16 +1051,17 @@ def process_single_row_testdata(row, sys_prompt, parameters, endpoint_name, toke
     document_id = row['document_id']
     contract_data = row['text']
     reference_dict = row['inference'] # list of dictionaries
-    
-    # ignore inference if contract_data is too long
-    tokens = tokenizer.encode(contract_data)
-    print(f"Document {document_id} is {len(tokens)} tokens\n")
-    if len(tokens) > 8000:
-        print(f"Document {document_id} is over 8000 tokens and ignored")
-        return -1
 
     # make inference to model
-    inference_dict = invoke_model(smr_client, sys_prompt, parameters, contract_data, endpoint_name, tokenizer, id=document_id)
+    inference_dict = invoke_model(
+        smr_client, 
+        sys_prompt, 
+        parameters, 
+        contract_data, 
+        endpoint_name, 
+        adapter_name, 
+        tokenizer, 
+        id=document_id)
     #print(inference_dict)
     if inference_dict == -1:
         return -1
@@ -868,15 +1078,18 @@ def process_single_row_testdata(row, sys_prompt, parameters, endpoint_name, toke
             "reference_dict": reference_dict,
             "document_level_metrics": document_level_metrics}
 
-def process_multiple_row_testdata(project,
-                                  endpoint_name,
-                                  eval_data_key,
-                                  eval_data_tag,
-                                  prompt_key,
-                                  prompt_tag,
-                                  key):
-    
-    from src import utils_evaluate_model as evaluate_model
+def process_multiple_row_testdata(
+    project,
+    endpoint_name,
+    adapter_name,
+    eval_data_key,
+    eval_data_tag,
+    prompt_key,
+    prompt_tag,
+    key,
+    max_output_l=2000 # change this
+):
+
     # get input data handle data paths
     artifact = project.get_artifact(key=eval_data_key, tag=eval_data_tag)
     artifact_latest_s3_path = artifact.target_path
@@ -892,6 +1105,10 @@ def process_multiple_row_testdata(project,
     prompt_tag = prompt_artifact.to_dict()['spec']['producer']['tag']
     invoc_config = prompt_artifact.to_dict()['spec']['invocation_config']
     print("invoc_config:")
+    if invoc_config['max_new_tokens'] > max_output_l:
+        invoc_config['max_new_tokens'] = max_output_l
+        print(f"max_new_tokens is too high and reduced to {max_output_l}")
+
     print(invoc_config)
     print()
     
@@ -906,10 +1123,9 @@ def process_multiple_row_testdata(project,
         source=artifact_latest_s3_path, 
         format="parquet")
     
-    #small_test_dataset = test_dataset.to_table().to_pylist()[0:5]
-    test_dataset = test_dataset.to_table().to_pylist()
+    test_dataset = test_dataset.to_table().to_pylist()[:10]
 
-    MINI_BATCH_SIZE = 10  # match API limit
+    MINI_BATCH_SIZE = 15 # or whatever, it goes to the queue
     all_results = {"contract_data": [],
                    "inference_dict": [],
                    "reference_dict": [],
@@ -921,7 +1137,7 @@ def process_multiple_row_testdata(project,
         # Prepare the minibatch
         mini_batch = test_dataset[i : i + MINI_BATCH_SIZE]
         batch_number = (i // MINI_BATCH_SIZE) + 1
-        print(f"--- Starting Mini-Batch {batch_number} ({len(mini_batch)} requests) ---")
+        print(f"\n--- Starting Mini-Batch {batch_number} ({len(mini_batch)} requests) ---")
     
         with ThreadPoolExecutor(max_workers=MINI_BATCH_SIZE) as executor:
             mbatch_results = list(
@@ -929,6 +1145,7 @@ def process_multiple_row_testdata(project,
                                                                 system_prompt,
                                                                 invoc_config,
                                                                 endpoint_name,
+                                                                adapter_name,
                                                                 tokenizer
                                                                 )
                             , mini_batch)
@@ -945,6 +1162,7 @@ def process_multiple_row_testdata(project,
             print(f"Mini-Batch {batch_number} completed successfully.")
 
     dataset_metrics = evaluate_model.dataset_level_metrics(all_results["document_level_metrics"])
+    print(dataset_metrics)
 
     # Write all data to S3 output path
     # Ensure your AWS credentials are configured in your environment
