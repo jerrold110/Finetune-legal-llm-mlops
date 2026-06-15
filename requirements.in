@@ -2,8 +2,8 @@
 # in the above version, that was for mlrun 1.6 - mistake on my part
 # python 3.11 is required for sagemaker >=3.0.0
 sagemaker>=2.0.0,<3.0.0
-mlrun >= 1.10.0
-mlrun[s3] >= 1.10.0
+mlrun == 1.10.3
+s3fs # instead of mlrun[s3]
 tqdm>=4.66.0
 
 transformers>=4.51.3
