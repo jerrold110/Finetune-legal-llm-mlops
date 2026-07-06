@@ -1,14 +1,22 @@
 """
 Rouge scores:
-precision: Measures the number of overlapping units (n-grams) between the generated text and the reference text, divided by the total number of units in the generated text.
-recall: Measures the number of overlapping units (n-grams) between the generated text and the reference text, divided by the total number of units in the reference text.
-fmeasure: The harmonic mean of precision and recall, providing a single score that balances both aspects
-.
-It is acceptable if the generated text is longer than the reference text, as long as it contains the relevant information and is coherent. The key is to ensure that the generated text captures the essential content of the reference text. Therefore, recall is more important. (ignore) However we till use fmeasure as the main metric to evaluate the model performance, as it provides a balanced view of both precision and recall (we do not want too many words that are not relevant to the answer) (ignore).
 
-Source clause extracts can have multiple extracts and be out of order, hence I will be using rouge-2 instead of rouge-3+ because, rouge scores don't change much as N increases, and because the source extract could be made of multiple quotes in different orders - a high value of N will be too sensitive to this noise. rouge-1 does not capture enough information since it only considers unigrams.
+precision: Measures the number of overlapping units (n-grams) between the generated text and the reference text, divided by the total number of units in the generated text.
+
+recall: Measures the number of overlapping units (n-grams) between the generated text and the reference text, divided by the total number of units in the reference text.
+
+fmeasure: The harmonic mean of precision and recall, providing a single score that balances both aspects.
+
+It is acceptable if the generated text is longer than the reference text, as long as it contains the relevant information and is coherent. We till use fmeasure as the main metric to evaluate the model performance, as it provides a balanced view of both precision and recall (we do not want too many words that are not relevant to the answer)
+
+Source clause extracts can have multiple extracts and be out of order. I will be using rouge-3 instead of rouge-2. Even though rouge scores don't change much as N increases, the source extract could be made of multiple quotes in different orders - a high value of N will be slightly more sensitive to this noise. 
+
+rouge-1 does not capture enough information since it only considers unigrams.
+
+=======================================================================================
 
 Evaluation:
+
 There are 17 hypotheses for each data point, the label prediction is either true or false.
 A true prediction is defined as a matching label for a hypothesis_id. 
 A false prediction is defined as an ummatching label for a hypothesis_id.

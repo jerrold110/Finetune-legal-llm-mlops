@@ -2,8 +2,6 @@
 import os, sys
 parent_dir = os.path.abspath('..')
 sys.path.append(parent_dir)
-
-#print(sys.executable)
 # ====== If run from notebooks, the working directory is /notebooks =====
 
 import src.utils as utils #import utils

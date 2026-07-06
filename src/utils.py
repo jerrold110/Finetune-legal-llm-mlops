@@ -272,7 +272,6 @@ def prepare_train_datasets(project,
         )
 
         # 2. Prompt text: everything the model is allowed to *see*, not generate
-        #    add_generation_prompt=True appends the assistant header (e.g. <|assistant|>)
         prompt_messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -281,10 +280,10 @@ def prepare_train_datasets(project,
         prompt_text = tokenizer.apply_chat_template(
             prompt_messages, 
             tokenize=False, 
-            add_generation_prompt=True # this is important to append the assistant tag
+            add_generation_prompt=True # this is important to append the assistant tag <|assistant|>
         )
 
-        # 3. Tokenize both
+        # 3. Tokenize both prompt_ids and full_ids
         prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
         full_ids = tokenizer(full_text, add_special_tokens=False)["input_ids"]
 
@@ -292,7 +291,7 @@ def prepare_train_datasets(project,
         if full_ids[:len(prompt_ids)] != prompt_ids:
             raise ValueError("Tokenization mismatch! Adjust your prompt split.")
 
-        # 4. Build labels: mask prompt, keep response
+        # 4. Build labels array: mask prompt tokens with -100, keep response
         labels = [-100] * len(prompt_ids) + full_ids[len(prompt_ids):]
 
         # 5. Truncate to max_length
@@ -307,7 +306,7 @@ def prepare_train_datasets(project,
         labels = [lab if lab != tokenizer.pad_token_id else -100 for lab in labels]
         attention_mask = [1 if tok != tokenizer.pad_token_id else 0 for tok in input_ids]
 
-        # format is lost during coversion from dict to datasetDict
+        # Format is lost during coversion from dict to datasetDict, do don't bother
         # return (torch.tensor(input_ids),
         #         torch.tensor(attention_mask),
         #         torch.tensor(labels))
@@ -605,7 +604,6 @@ def evaluate_model_lora(
     iam = os.environ['MLRUN_AWS_ROLE_ARN']
 
     from sagemaker.pytorch import PyTorch
-    # import sagemaker
 
     # If you define a session, it uses this instead of the default us-east-1
     # boto_session = boto3.Session(region_name="us-east-2")
@@ -734,40 +732,6 @@ def deploy_lora_model(
     MAX_MODEL_LEN = max_model_len
     BATCH_TOKENS = batch_tokens
 
-    # lmi_batch_config = {
-    #     "HF_MODEL_ID": HF_MODEL_ID,
-    #     "HF_TOKEN": os.environ['HF_TOKEN'], 
-    #     "HF_REVISION": HF_REVISION,
-
-    #     "SERVING_ENGINE": "Python", # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/conceptual_guide/lmi_engine.html
-    #     "OPTION_ROLLING_BATCH": "vllm", #vllm disable
-    #     "OPTION_ASYNC_MODE":"false",
-    #     "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
-    #     #"OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service", # this is from article
-    #     "OPTION_QUANTIZE":"fp8",
-    #     "OPTION_ENABLE_PREFIX_CACHING": "false", # caching the system prompt
-
-    #     "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
-    #     "MAX_BATCH_SIZE": BATCH_SIZE, # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/starting-guide.html
-    #     "MAX_CONCURRENT_REQUESTS": BATCH_SIZE,
-    #     "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
-    #     # --- ADVANCED SETTINGS -----
-    #     # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
-    #     "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS, "OPTION_MAX_ROLLING_BATCH_PREFILL_TOKENS": BATCH_TOKENS,# Hard cap on the batch size to KV capacity pressure control which is a common cause of stalling/crashing
-    #     "VLLM_ATTENTION_BACKEND":"TORCH_SDPA", # TORCH_SDPA  FLASH_ATTN
-        
-    #     # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
-    #     "OPTION_PREDICT_TIMEOUT": str(60*10),    # 10 mins
-    #     "OPTION_MODEL_LOADING_TIMEOUT": str(60*20), # 20 mins
-    #     "OPTION_TRUST_REMOTE_CODE": "true", # security
-    #     "SERVING_FAIL_FAST":"true",
-        
-    #     "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
-    #     "OPTION_MAX_LORA_RANK": "16",
-    #     "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
-    #     "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
-    # }
-
     lmi_batch_config = {
         "HF_MODEL_ID": HF_MODEL_ID,
         "HF_TOKEN": os.environ['HF_TOKEN'], 
@@ -828,10 +792,10 @@ def deploy_lora_model(
         )
 
     #endpoint_name = predictor.endpoint_name # unavailable for lora endpoint
-
     print(f"✅ Deployed model (LoRA): {endpoint_name}, {base_ic_name}")
 
-    # Attach autoscaling policy to base_ic_name
+    # Attach autoscaling policy to base_ic_name, logs are under base_ic_name not endpoint_name
+
           
     return endpoint_name, base_ic_name
 
@@ -860,7 +824,6 @@ def deploy_lora_adapter(
 
     ic_adapter_name = f'adapter-{endpoint_name}'
 
-    # ---------------- FORCE REGION
     boto_session = boto3.Session(region_name=REGION)
     s3_client = boto_session.client("s3")
     sm_client = boto_session.client("sagemaker")
@@ -909,13 +872,12 @@ def deploy_lora_adapter(
     print("✅ Success! Transfer complete without touching the disk.")
 
     # ------------- Create inference component for model endpoint
-    sm_client = boto3.client(service_name="sagemaker")
-    #sm_runtime = boto3.client(service_name="sagemaker-runtime")
+    sm_client = boto3.client(service_name="sagemaker") # not sagemaker-runtime
     sess = sagemaker.session.Session()
     #iam = os.environ['MLRUN_AWS_ROLE_ARN']
 
     adapter_inference = sm_client.create_inference_component(
-        InferenceComponentName = ic_adapter_name,   # extension ot endpoint_name
+        InferenceComponentName = ic_adapter_name,   # extension of endpoint_name
         EndpointName = endpoint_name,
         Specification={
             "BaseInferenceComponentName": base_ic_name,
@@ -931,7 +893,7 @@ def deploy_lora_adapter(
     return adapter_inference, ic_adapter_name
 
 
-#### Online load testing and evaluation
+#### Load test of model endpoint
 # def soft_search_json(inference):
 #     start = inference.find('{')
 #     end = inference.rfind('}')
