@@ -1,7 +1,8 @@
-metadata:
-  name: finetune-legal-extractor
-  created: '2026-05-06T04:12:14.230955'
 spec:
+  source: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
+  description: A fine-tuned legal extractor LLM
+  conda: ''
+  desired_state: online
   functions:
   - url: src/register_raw_dataset.py
     name: raw-proc
@@ -28,11 +29,10 @@ spec:
     kind: job
     image: mlrun/mlrun
     handler: deploy_new_model_adapter
-  conda: ''
-  source: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
   origin_url: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
-  desired_state: online
-  description: A fine-tuned legal extractor LLM
+kind: project
 status:
   state: online
-kind: project
+metadata:
+  created: '2026-05-06T04:12:14.230955'
+  name: finetune-legal-extractor
