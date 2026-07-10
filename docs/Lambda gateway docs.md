@@ -29,6 +29,10 @@ https://docs.aws.amazon.com/boto3/latest/reference/services/appconfig/client/sta
 
 https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-integration-lambda-extensions-add.html
 
+4. Lambda sends metrics to CloudWatch. Detects metrics on CloudWatch. Alarms active rollback
+
+https://docs.aws.amazon.com/appconfig/latest/userguide/monitoring-overview.html
+
 ## Appconfig configuration profile
 {
     'model_endpoint': model_endP,
@@ -66,7 +70,7 @@ count_entail
 count_contradict
 
 count_neutral
-
+```
 Python app
     │
     ├── PutMetricData
@@ -74,4 +78,5 @@ Python app
 CloudWatch Metrics
     ▼
 CloudWatch Dashboard
+```
 
