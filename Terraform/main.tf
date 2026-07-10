@@ -153,6 +153,9 @@ resource "aws_appconfig_configuration_profile" "this" {
   location_uri   = "hosted"
 }
 
+# resource "aws_cloudwatch_metric_alarm" "myCloudwatchMetricAlarm" {
+# }
+
 # Deployment strategy is linear 20% increase in intervals across 25 minutes (5 mins each)
 resource "aws_appconfig_deployment_strategy" "rolling_update" {
   name                           = "${local.appconfig_app_name}-rolling-update-deployment"

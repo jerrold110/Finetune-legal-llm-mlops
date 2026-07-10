@@ -33,18 +33,30 @@ def deploy_new_model_adapter(
     # Define key
     key = datetime.now().strftime("%Y%m%d_%H%M")
 
-    # Deploy model with IC component
-    endpoint_name, base_ic_name = utils.deploy_lora_model()
+    # Deploy model with base component for LoRA adapter
+    endpoint_name, base_ic_name = utils.deploy_sm_lora_model(
+        instance="ml.g6e.2xlarge"
+        #batch_size="7",
+        #batch_tokens="30000" # throughput vs latency. Bottleneck is either memory (too high) or prefill (too low). 16000-40000
+        # 40000, 10 failed completely. Prefill bottleneck.
+        # 28600/31000, 8 is close, 1 fail. Decode bottleneck, not enough memory
+        # Next to try is batch size 7 with 28600(7150*4, 7150*5), to maximise throughput during decoding. Try to learn how to optimise memory.
 
-    # Deploy adapter as IC adapter
-    adapter, adapter_name = utils.deploy_lora_adapter(
+        # 31000, 7x5, fp8, 0.95. 4 failed out of 35. Decode bottleneck. 
+        # Reduce to 5000*5+1000~26000. 5 prefill at once, more memory for kvcache-decoding. This caused 6 out of 7 to fail. Prefill bottleneck
+        # Best for 7 is 30000/31000
+    )
+
+    # Deploy LORA adapter as IC adapter
+    adapter, adapter_name = utils.deploy_sm_lora_adapter(
         key,
         endpoint_name,
         base_ic_name,
         adapter_revision
     )
+    print("Logs are under: /aws/sagemaker/InferenceComponents/base-lmi-Hermes-FP8-2026-xxxxxx")
 
-    # # Run load tests
+    # Run load tests
     # dataset_metrics, s3_eval_path = utils.process_multiple_row_testdata(
     #     project,
     #     endpoint_name,
@@ -62,13 +74,23 @@ def deploy_new_model_adapter(
     # check_fmeasure = dataset_metrics['average_fmeasure'] >= 0.8
 
     # result = check_count and check_accuracy and check_fmeasure
+    # if not result:
+    #     raise Exception("Load test failed")
 
-    # # If tests pass, gradually shift traffic to new model by sending request to AppConfig with pre-configured deployment policy
-    # if result:
-    #     print("Sending request to AppConfig to change variables in Lambda")
-    #     pass
-    # else:
-    #     raise ValueError(f"The endpoint smoke test failed with values: {dataset_metrics}")
+    # If tests pass, gradually shift traffic to new model by sending request to AppConfig with pre-configured deployment policy
+
+    print("Sending request to AppConfig to change variables in Lambda")
+    utils.update_gateway_destination_sm(
+        model_endpoint=endpoint_name,
+        model_adapter=adapter_name,
+        template_uri="s3://legal-llama-data/llm_prompt/contract_extractor_prompt/20260610_1257/contract_extractor_prompt.json",
+        rolling=rolling_update
+    )
+
+    # This is to run a couple of tests for the rolling update, we should be running a test for direct and rolling
+    if rolling_update:
+        
+
     
     return {
         'endpoint_name': base_ic_name,

@@ -49,8 +49,9 @@ import mlrun
 from src import utils_evaluate_model as evaluate_model
 #import utils_evaluate_model as evaluate_model # for tests
 
-##### Functions for training and evaluation
-############################
+# ========================================
+# Functions for training and evaluation
+# ========================================
 
 def prepare_notrain_datasets(project,
                              test_dataset,
@@ -180,7 +181,7 @@ def evaluate_model_base(
         entry_point='quant_eval_vllm_base.py',
         base_job_name='sm-hf-basemodel-eval',
         source_dir='../src/scripts/evaluate',
-        instance_type='ml.g6e.2xlarge',
+        instance_type='ml.g6e.4xlarge',
         instance_count=1,
         ###### max_wait should be equal to or greater than max_run in seconds
         use_spot_instances=True,
@@ -670,9 +671,9 @@ def evaluate_model_lora(
     return metric_data, s3_met_uri
 
 
-
-##### Functions for serving and testing in production
-############################
+# ========================================
+# Functions for serving and testing in production
+# ========================================
 """
 https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#rolling-batch-configurations
 https://docs.djl.ai/master/docs/serving/serving/docs/lmi/conceptual_guide/lmi_engine.html
@@ -685,10 +686,11 @@ https://docs.djl.ai/master/docs/demos/aws/sagemaker/large-model-inference/sample
 https://docs.djl.ai/master/docs/demos/aws/sagemaker/large-model-inference/sample-llm/stateful_inference_gemma3_4b_lora.html#invoke-adapter-ic
 
 """
-def deploy_lora_model(
+def deploy_sm_lora_model(
         batch_size:str = "4",
         max_model_len:str = "7150",
-        batch_tokens:str = "28600"
+        batch_tokens:str = "28600",
+        instance:str = "ml.g6e.4xlarge"
     ):
     
     #from sagemaker.djl_inference.model import DJLModel
@@ -726,7 +728,8 @@ def deploy_lora_model(
     role = os.environ['MLRUN_AWS_ROLE_ARN']
     HF_MODEL_ID = "JerroldK/Hermes-4-14B-contract-extractor"
     HF_REVISION="75875f970c359f89ad9e7d4dc86bf3c075c73c31"
-    INSTANCE_TYPE = "ml.g6e.2xlarge" # or ml.g6e.12xlarge
+    INSTANCE_TYPE = instance
+    print(INSTANCE_TYPE)
 
     BATCH_SIZE = batch_size
     MAX_MODEL_LEN = max_model_len
@@ -743,23 +746,27 @@ def deploy_lora_model(
         "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
         "OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service", # this is from article
         "OPTION_QUANTIZE":"fp8",
-        "OPTION_ENABLE_PREFIX_CACHING": "false", # caching the system prompt
+        "OPTION_KV_CACHE_DTYPE":"fp8",
+        "OPTION_GPU_MEMORY_UTILIZATION":"0.95",
+        # "OPTION_ENABLE_CHUNKED_PREFILL":"false",
+        # "OPTION_ENABLE_PREFIX_CACHING":"false",
+        # "OPTION_ENFORCE_EAGER":"true",
 
         "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
         "MAX_BATCH_SIZE": BATCH_SIZE, # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/starting-guide.html
-        "MAX_CONCURRENT_REQUESTS": BATCH_SIZE,
+        "MAX_CONCURRENT_REQUESTS": "200",
         "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
         # --- ADVANCED SETTINGS -----
         # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
-        "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS,"OPTION_MAX_ROLLING_BATCH_PREFILL_TOKENS": BATCH_TOKENS,# Hard cap on the batch size to KV capacity pressure control which is a common cause of stalling/crashing
+        "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS,# Limits the number of tokens that can be processed in a single step during prefill
         
         # https://docs.vllm.ai/en/v0.8.3/serving/env_vars.html
         "VLLM_ATTENTION_BACKEND":"FLASHINFER", # TORCH_SDPA  FLASH_ATTN
         
         # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
-        "OPTION_PREDICT_TIMEOUT": str(60*10),    # 10 mins
-        "OPTION_MODEL_LOADING_TIMEOUT": str(60*20), # 20 mins
-        "OPTION_TRUST_REMOTE_CODE": "true", # security
+        "OPTION_PREDICT_TIMEOUT": str(60*15),
+        "OPTION_MODEL_LOADING_TIMEOUT": str(60*20),
+        "OPTION_TRUST_REMOTE_CODE": "true",
         "SERVING_FAIL_FAST":"true",
         
         "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
@@ -767,7 +774,45 @@ def deploy_lora_model(
         "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
         "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
     }
-    print(lmi_batch_config)
+    # THIS IS OUTDATED AND REQUIRES A DIFFERENT IMAGE. DO NOT USE
+    lmi_old_batch_config = {
+        "HF_MODEL_ID": HF_MODEL_ID,
+        "HF_TOKEN": os.environ['HF_TOKEN'], 
+        "HF_REVISION": HF_REVISION,
+
+        "OPTION_ROLLING_BATCH": "vllm", #vllm disable
+        "OPTION_ENFORCE_EAGER":"true",
+        "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
+        "OPTION_QUANTIZE":"fp8",
+        "OPTION_KV_CACHE_DTYPE":"fp8",
+        
+        "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
+        "MAX_CONCURRENT_REQUESTS": "200",
+        "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
+        # --- ADVANCED SETTINGS -----
+        # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
+        "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS,# Limits the number of tokens that can be processed in a single step during prefill
+        
+        # https://docs.vllm.ai/en/v0.8.3/serving/env_vars.html
+        "VLLM_ATTENTION_BACKEND":"FLASH_ATTN", # TORCH_SDPA  FLASH_ATTN FLASHINFER
+        "OPTION_ENABLE_CHUNKED_PREFILL":"false",
+        "OPTION_ENABLE_PREFIX_CACHING":"false",
+        "OPTION_ASYNC_MODE":"false",
+        
+        # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
+        "OPTION_PREDICT_TIMEOUT": str(60*10),    # 10 mins
+        "OPTION_MODEL_LOADING_TIMEOUT": str(60*20), # 20 mins
+        "SERVING_FAIL_FAST":"true",
+        
+        "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
+        "OPTION_MAX_LORA_RANK": "16",
+        "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
+        "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
+    }
+
+    for k, v in lmi_batch_config.items():
+        print(k, v)
+    
 
     # About 10-12 mins if successful
     model = Model(
@@ -799,7 +844,7 @@ def deploy_lora_model(
           
     return endpoint_name, base_ic_name
 
-def deploy_lora_adapter(
+def deploy_sm_lora_adapter(
     key,
     endpoint_name,
     base_ic_name,
@@ -892,13 +937,9 @@ def deploy_lora_adapter(
 
     return adapter_inference, ic_adapter_name
 
-
-#### Load test of model endpoint
-# def soft_search_json(inference):
-#     start = inference.find('{')
-#     end = inference.rfind('}')
-
-#     return start, end
+# ========================================
+# Load test of model endpoint
+# ========================================
 
 def invoke_model(
     smr_client, 
@@ -1049,7 +1090,8 @@ def process_multiple_row_testdata(
     prompt_key,
     prompt_tag,
     key,
-    max_output_l=2000 # change this
+    max_output_l=2000, # don't increase
+    batchsize=4
 ):
 
     # get input data handle data paths
@@ -1084,10 +1126,17 @@ def process_multiple_row_testdata(
     test_dataset = ds.dataset(
         source=artifact_latest_s3_path, 
         format="parquet")
-    
-    test_dataset = test_dataset.to_table().to_pylist()[:10]
+    # test the first 10 samples
+    # test_dataset = test_dataset.to_table().to_pylist()[:10]
 
-    MINI_BATCH_SIZE = 15 # or whatever, it goes to the queue
+    # test 5 random samples
+    import random
+    testSize=5
+    test_dataset = test_dataset.to_table().to_pylist()
+    start = random.randint(0, len(test_dataset) - testSize)
+    test_dataset = test_dataset[start : start+testSize]
+
+    MINI_BATCH_SIZE = batchsize # or whatever, it goes to the queue
     all_results = {"contract_data": [],
                    "inference_dict": [],
                    "reference_dict": [],
@@ -1143,3 +1192,86 @@ def process_multiple_row_testdata(
     print(s3_eval_path)
     
     return dataset_metrics, s3_eval_path
+
+
+# ========================================
+# Update traffic gateway and test it
+# ========================================
+def update_gateway_destination_sm(
+    model_endpoint:str,
+    model_adapter:str,
+    template_uri:str,
+    rolling:bool
+    ):
+    import subprocess
+
+    parent_dir = os.path.abspath('../Terraform/') # this is called from notebook
+
+    result = subprocess.run(
+        ["terraform", "output", "-json"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=parent_dir
+    )
+    outputs = json.loads(result.stdout)
+    print(outputs)
+    values = {key: data["value"] for key, data in outputs.items()}
+    try:
+        appconfig_app_id = values["appconfig_app_id"]
+        appconfig_env_id = values["appconfig_env_id"]
+        appconfig_confprof_cpid = values["appconfig_confprof_cpid"]
+        appconfig_deploystrat_direct_id = values["appconfig_deploystrat_direct_id"]
+        appconfig_deploystrat_rolling_id = values["appconfig_deploystrat_rolling_id"]
+        
+    except KeyError as e:
+        raise KeyError(f"Missing required configuration key: {e.args[0]}") from None
+
+    ac_client = boto3.client("appconfig")
+
+    sysP_uri = template_uri
+
+    configuration = {
+        'model_endpoint': model_endpoint,
+        'model_adapter': model_adapter,
+        'template_uri': sysP_uri
+        }
+
+    host_config_response = ac_client.create_hosted_configuration_version(
+        ApplicationId=appconfig_app_id,
+        ConfigurationProfileId=appconfig_confprof_cpid,
+        Content=json.dumps(configuration).encode("utf-8"),
+        ContentType="application/json",
+        Description="AppConfig configuration profile for a rolling or direct deployment to be read in Lambda"
+    )
+    version_number = host_config_response["VersionNumber"]
+
+    if rolling==False:
+        deployment_strategy_id = appconfig_deploystrat_direct_id
+    else:
+        deployment_strategy_id = appconfig_deploystrat_rolling_id
+
+    deploy = ac_client.start_deployment(
+        ApplicationId=appconfig_app_id,
+        EnvironmentId=appconfig_env_id,
+        # deployment strategy
+        DeploymentStrategyId=deployment_strategy_id,
+        # configuration profile created on AppConfig hosted configuration profile 
+        ConfigurationProfileId=appconfig_confprof_cpid,
+        ConfigurationVersion=str(version_number),
+    )
+    print(deploy["DeploymentNumber"])
+    for k,v in deploy.items():
+        print(k, v)
+
+def rolling_run_test_every_5_mins(
+    project,
+    endpoint_name,
+    adapter_name,
+    eval_data_key,
+    eval_data_tag,
+    prompt_key,
+    prompt_tag,
+    key
+):
+    None
