@@ -1,8 +1,10 @@
 # Finetune-legal-llm-mlops
 This is a project on designing and building a production-grade LLMOps platform incorporating data/training/serving/monitoring systems built using MLRun and various AWS services. It serves a fine-tuned LLM that extracts and classifies content from multi-page legal contracts up to 11,000 tokens long in structured JSON data with source quote attribution.
 
-## Why MLRun for MLOps
-MLRun is an AI orchestration framework for managing ML and GenAI applications across their lifecycle. There is an open source version, and a hosted version provided by Iguazio. I am running this on a local machine as a substitute for the hosted version which would be used in a real project. Projects are defined by YAML files which can be shared across machines allowing the recreation of a project, this also facilitates CI/CD integration with Github Actions.
+## Why MLRun not MLFlow for MLOps?
+MLflow is a tool for tracking machine learning experiments and managing models/datasets but does not have functionality for MLOps pipeline orchestration. MLRun has all the features of MLFlow and more; it is a framework for manging all the workflows in GenAI/ML pipelines including data preparation, model training, deployment, and continuous monitoring, that can be integrated with Kubernetes/Kubeflow for scalability. 
+
+There is an open source version, and a managed version of MLFlow provided by Iguazio. I am running this on a local machine as a substitute for the hosted version which would be used in a real project. Projects are defined by YAML files which can be shared across machines allowing the recreation of a project, this also facilitates CI/CD integration with Github Actions.
 
 ![MLRun overview](diagram/mlrun1.png)
 
@@ -60,20 +62,24 @@ The deployment workflow involves deploying either a new model or a new LoRA adap
 
 
 # Pipelines in this project
-* Model training job (produces adapter, train/validation loss graph)
+* Model training job (produces adapter, loss graph on train & validation datasets)
 * Model evaluation (produces performance metrics)
-* Model deployment with smoke tests and gradual traffic shifting
+* Model deployment with load tests and gradual traffic shifting
 * Registering prompts/models/datasets
+* Data preparation
 
 ## Data problem
-The data science problem
-
-
+The data science problem explained.
 
 ### AWS DLC images (sage, EC2, ECS, EKS)
 https://aws.github.io/deep-learning-containers/reference/available_images/
 
-### Base model
+### Base large language model
+https://huggingface.co/NousResearch/Hermes-4-14B
+
+This is a post trained version of Qwen 3 14B
+
+### Memory consumption
 Rough guide (unsuitable):
 https://docs.djl.ai/master/docs/serving/serving/docs/lmi/deployment_guide/instance-type-selection.html
 ### Infrastructure, GPUs, Cuda and containers
