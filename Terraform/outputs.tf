@@ -22,7 +22,25 @@ output "appconfig_deploystrat_direct_id" {
   value = aws_appconfig_deployment_strategy.direct_update.id
 }
 
+output "iam_appconfig_cw_malarm_rollback" {
+  value = aws_iam_role.appconfig_exec_role.arn
+}
+
+output "appconfig_cw_malarm_1b_arn" {
+  value = aws_cloudwatch_metric_alarm.deployment_metric_carp_black.arn
+}
+
+output "appconfig_cw_malarm_1w_arn" {
+  value = aws_cloudwatch_metric_alarm.deployment_metric_carp_white.arn
+}
+
+
+
+
+
 /*
 These variables can be read in the deployment pipeline with the subprocess module. 
 command: terraform output -json
+
+Check utils.py
 */

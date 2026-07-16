@@ -44,7 +44,7 @@ module "docker_image" {
   ecr_repo        = local.lambda_function_name
 
   use_image_tag = true
-  image_tag     = "1.6"
+  image_tag     = "1.7"
 
   source_path = var.lambda_dir
 
@@ -107,7 +107,7 @@ data "aws_iam_policy_document" "lambda_permissions" {
   statement {
     effect = "Allow"
     actions = [
-    "cloudwatch:PutMetricData"
+      "cloudwatch:PutMetricData"
     ]
     resources = ["*"]
   }
@@ -141,6 +141,10 @@ resource "aws_appconfig_environment" "this" {
   name           = local.appconfig_env_name
   application_id = aws_appconfig_application.this.id
 
+  # ==========================================
+  # Attach CloudWatch metric alarms to Appconfig environment that will trigger rollback DURING deployment workflow with AppConfig.Client.update_environment() NOT BEFORE WHEN SPINNING UP
+  # ==========================================
+
   # monitor {
   #   alarm_arn      = aws_cloudwatch_metric_alarm.example.arn
   #   alarm_role_arn = aws_iam_role.example.arn
@@ -153,16 +157,13 @@ resource "aws_appconfig_configuration_profile" "this" {
   location_uri   = "hosted"
 }
 
-# resource "aws_cloudwatch_metric_alarm" "myCloudwatchMetricAlarm" {
-# }
-
-# Deployment strategy is linear 20% increase in intervals across 25 minutes (5 mins each)
+# Deployment strategy is linear 25% increase in intervals across 20 minutes (5 mins each)
 resource "aws_appconfig_deployment_strategy" "rolling_update" {
   name                           = "${local.appconfig_app_name}-rolling-update-deployment"
-  deployment_duration_in_minutes = 25
-  final_bake_time_in_minutes     = 25
+  deployment_duration_in_minutes = 20
+  final_bake_time_in_minutes     = 20 # The total time which to monitor alarms
   growth_type                    = "LINEAR"
-  growth_factor                  = 20
+  growth_factor                  = 25
   replicate_to                   = "NONE"
 
   tags = {
@@ -174,8 +175,10 @@ resource "aws_appconfig_deployment_strategy" "rolling_update" {
 resource "aws_appconfig_deployment_strategy" "direct_update" {
   name                           = "${local.appconfig_app_name}-direct-deployment"
   deployment_duration_in_minutes = 0
-  final_bake_time_in_minutes     = 0
+  final_bake_time_in_minutes     = 0 # The total time which to monitor alarms
   growth_type                    = "LINEAR"
   growth_factor                  = 100
   replicate_to                   = "NONE"
 }
+
+
