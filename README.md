@@ -8,7 +8,7 @@ MLflow is a tool for tracking machine learning experiments and managing models/d
 
 **Main advantages**: https://docs.mlrun.org/en/stable/install-mlrun-ce/index.html
 
-There is a community edition version, and a managed version of MLFlow provided by Iguazio. I am running this on a local machine with an unsupported local docker installation as a substitute for the hosted version which would be used in a real project. 
+There is a open-source community edition (CE) version and a managed version of MLRun provided by Iguazio. I am running the CE version on a local machine with a local docker setup which has not been supported since version 1.6 (I am using 1.10) as a substitute for the hosted version which would be used in a real project. 
 
 Projects are defined by YAML files which can be shared across machines allowing the recreation of a project, this also facilitates CI/CD integration with Github Actions.
 
@@ -67,6 +67,14 @@ Model training will be done with Sagemaker training jobs using G6e instances whi
 I use Sagemaker training jobs on a G6e.12xlarge instance (four 48GB GPUs) because training infrastructure only needs to be transient, and spot instances are available for training which saves up to 90% of cost. Training checkpointing on S3 is available through the hugging face transformers library.
 
 I created a custom image to use for training for this particular version of `Transformers` needed for qwen 3 and the L40s GPU archirecture under `images/sagemaker_train_job/`
+
+# Parallelism for distribtued training on sagemaker
+There are multiple parallelsim strategies offered by the SageMaker including DPP, TP, PP, FSDP
+**Parallelism strategies offered**: https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-intro-v2.html#model-parallel-intro-tp-v2
+
+However I kept encountering compatability errors with the version of Transformers I was using because Qwen 3 is a relatively new model architecture that requires Transformers 4.51.3, and since I am using Sagemaker Training Jobs, there is very little flexibility offered in configuring versions of sagemaker/pytorch/transformers/CUDA installations in the DLC images offered. I decided to use the Pytorch DPP library for distributed training with a modified version of the provided Sagemaker-Transformers image available.
+
+Tensor/Pipeline parallelsim are not needed since the model fits on a single G6e GPU, so DPP is sufficient. Pytorch DPP is used by configuring the options under `from sagemaker.huggingface import HuggingFace`.
 
 # Training strategy
 There is not a lot of data present in the data in the ContractNLI dataset. Fine-tuning is usually performed with a single epoch and at minimum a few thousand samples are the minimum. We only have 422 training samples, so I will use a multi-epoch strategy with early stopping based on deltas in the loss values at each observation.
