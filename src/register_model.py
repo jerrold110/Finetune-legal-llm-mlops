@@ -30,28 +30,30 @@ def register_new_model(
     version
     ):
     # model-purpose-artifacts
-    model_key = "Hermes-4-14B-ContractExtractor-model-adapter"
+    model_key = "ContractExtractor-Hermes4-14b"
 
     # Initialize the MLRun DB client
     db = mlrun.get_run_db()
     run_dict = db.read_run(uid=experiment_run_uid, project="finetune-legal-extractor")
 
     # Convert the dictionary to a RunObject for easier API access
-    run = RunObject.from_dict(run_dict)
+    #run = RunObject.from_dict(run_dict)
+    #output = run.outputs['return'] # this is what was returned 
     run_parameters = run_dict['spec']['parameters']
     run_metrics = run_dict['status']['results']
-    output = run.outputs['return'] # this is what was returned 
+    output = run_dict['status']['results']['return']
+    oid = output['commit_oid:'] #bug here
 
     # Pass in model_id, commit, hyperparameters, performance metrics
     #version = datetime.now().strftime("%Y%m%d_%H%M")
 
     model = project.log_model(
-                    key=f'{model_key}-{version}',
-                    tag="NA",
+                    key=f'{model_key}',
+                    tag=version,
                     metrics=run_metrics,
                     parameters=run_parameters,
                     framework="Hugging Face model with adapter",
-                    model_url="https://huggingface.co/JerroldK/H4-14b-contract-extractor-adapter",
+                    model_url=oid,
                     labels={"model": "Hermes-4-14B"},
                     upload=False
                     )

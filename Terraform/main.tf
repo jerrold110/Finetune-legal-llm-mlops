@@ -1,6 +1,5 @@
 locals {
-  lambda_function_name = "model_gateway"
-  #python_runtime          = "python3.11"
+  lambda_function_name    = "model_gateway"
   lambda_code_dir         = "../src/lambda"
   appconfig_app_name      = "lambda_model_gateway"
   appconfig_env_name      = "${local.appconfig_app_name}-environment"
@@ -18,6 +17,27 @@ https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-integration-lam
 Configuration URL:
 https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-integration-lambda-extensions-add.html
 */
+module "docker_image" {
+  source = "terraform-aws-modules/lambda/aws//modules/docker-build"
+
+  create_ecr_repo = true
+  ecr_repo        = local.lambda_function_name
+
+  use_image_tag = true
+  image_tag     = "0.6.1"
+
+  source_path = local.lambda_code_dir
+
+}
+
+resource "aws_cloudwatch_log_group" "lambda_function" {
+  name              = "/aws/lambda/${local.lambda_function_name}"
+  retention_in_days = 1
+
+  tags = {
+    Environment = "development"
+  }
+}
 
 module "lambda_function" {
   source = "terraform-aws-modules/lambda/aws"
@@ -35,19 +55,8 @@ module "lambda_function" {
   environment_variables = {
     "configurationProfileURL" : "http://localhost:2772/applications/${local.appconfig_app_name}/environments/${local.appconfig_env_name}/configurations/${local.appconfig_confprof_name}"
   }
-}
-
-module "docker_image" {
-  source = "terraform-aws-modules/lambda/aws//modules/docker-build"
-
-  create_ecr_repo = true
-  ecr_repo        = local.lambda_function_name
-
-  use_image_tag = true
-  image_tag     = "1.7"
-
-  source_path = var.lambda_dir
-
+  # check .terraform/modules/lambda_function/variables.tf for data types
+  logging_log_group = aws_cloudwatch_log_group.lambda_function.name # not arn
 }
 
 # ==========================================
@@ -146,8 +155,8 @@ resource "aws_appconfig_environment" "this" {
   # ==========================================
 
   # monitor {
-  #   alarm_arn      = aws_cloudwatch_metric_alarm.example.arn
-  #   alarm_role_arn = aws_iam_role.example.arn
+  #   alarm_arn      = aws_cloudwatch_metric_alarm.deployment_metric_carp_black.arn
+  #   alarm_role_arn = aws_iam_role.appconfig_exec_role.arn
   # }
 }
 
@@ -165,10 +174,6 @@ resource "aws_appconfig_deployment_strategy" "rolling_update" {
   growth_type                    = "LINEAR"
   growth_factor                  = 25
   replicate_to                   = "NONE"
-
-  tags = {
-    Type = "AppConfig Deployment Strategy"
-  }
 }
 
 # Immediate deployment

@@ -690,7 +690,7 @@ def deploy_sm_lora_model(
         batch_size:str = "4",
         max_model_len:str = "7150",
         batch_tokens:str = "28600",
-        instance:str = "ml.g6e.4xlarge"
+        instance:str = "ml.g6e.2xlarge"
     ):
     
     #from sagemaker.djl_inference.model import DJLModel
@@ -743,7 +743,9 @@ def deploy_sm_lora_model(
         "SERVING_ENGINE": "Python", # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/conceptual_guide/lmi_engine.html
         "OPTION_ROLLING_BATCH": "disable", #vllm disable
         "OPTION_ASYNC_MODE":"true",
-        "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
+        #"max" if enable tensor parallelism
+        # 1 enables data parallelism since 1 model per gpu
+        "TENSOR_PARALLEL_DEGREE": "1",
         "OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service", # this is from article
         "OPTION_QUANTIZE":"fp8",
         "OPTION_KV_CACHE_DTYPE":"fp8",
@@ -775,40 +777,40 @@ def deploy_sm_lora_model(
         "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
     }
     # THIS IS OUTDATED AND REQUIRES A DIFFERENT IMAGE. DO NOT USE
-    lmi_old_batch_config = {
-        "HF_MODEL_ID": HF_MODEL_ID,
-        "HF_TOKEN": os.environ['HF_TOKEN'], 
-        "HF_REVISION": HF_REVISION,
+    # lmi_old_batch_config = {
+    #     "HF_MODEL_ID": HF_MODEL_ID,
+    #     "HF_TOKEN": os.environ['HF_TOKEN'], 
+    #     "HF_REVISION": HF_REVISION,
 
-        "OPTION_ROLLING_BATCH": "vllm", #vllm disable
-        "OPTION_ENFORCE_EAGER":"true",
-        "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
-        "OPTION_QUANTIZE":"fp8",
-        "OPTION_KV_CACHE_DTYPE":"fp8",
+    #     "OPTION_ROLLING_BATCH": "vllm", #vllm disable
+    #     "OPTION_ENFORCE_EAGER":"true",
+    #     "TENSOR_PARALLEL_DEGREE": "1", # or "max" if enable tensor parallelism
+    #     "OPTION_QUANTIZE":"fp8",
+    #     "OPTION_KV_CACHE_DTYPE":"fp8",
         
-        "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
-        "MAX_CONCURRENT_REQUESTS": "200",
-        "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
-        # --- ADVANCED SETTINGS -----
-        # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
-        "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS,# Limits the number of tokens that can be processed in a single step during prefill
+    #     "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
+    #     "MAX_CONCURRENT_REQUESTS": "200",
+    #     "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
+    #     # --- ADVANCED SETTINGS -----
+    #     # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
+    #     "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS,# Limits the number of tokens that can be processed in a single step during prefill
         
-        # https://docs.vllm.ai/en/v0.8.3/serving/env_vars.html
-        "VLLM_ATTENTION_BACKEND":"FLASH_ATTN", # TORCH_SDPA  FLASH_ATTN FLASHINFER
-        "OPTION_ENABLE_CHUNKED_PREFILL":"false",
-        "OPTION_ENABLE_PREFIX_CACHING":"false",
-        "OPTION_ASYNC_MODE":"false",
+    #     # https://docs.vllm.ai/en/v0.8.3/serving/env_vars.html
+    #     "VLLM_ATTENTION_BACKEND":"FLASH_ATTN", # TORCH_SDPA  FLASH_ATTN FLASHINFER
+    #     "OPTION_ENABLE_CHUNKED_PREFILL":"false",
+    #     "OPTION_ENABLE_PREFIX_CACHING":"false",
+    #     "OPTION_ASYNC_MODE":"false",
         
-        # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
-        "OPTION_PREDICT_TIMEOUT": str(60*10),    # 10 mins
-        "OPTION_MODEL_LOADING_TIMEOUT": str(60*20), # 20 mins
-        "SERVING_FAIL_FAST":"true",
+    #     # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
+    #     "OPTION_PREDICT_TIMEOUT": str(60*10),    # 10 mins
+    #     "OPTION_MODEL_LOADING_TIMEOUT": str(60*20), # 20 mins
+    #     "SERVING_FAIL_FAST":"true",
         
-        "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
-        "OPTION_MAX_LORA_RANK": "16",
-        "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
-        "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
-    }
+    #     "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
+    #     "OPTION_MAX_LORA_RANK": "16",
+    #     "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
+    #     "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
+    # }
 
     for k, v in lmi_batch_config.items():
         print(k, v)
@@ -855,6 +857,7 @@ def deploy_sm_lora_adapter(
     import io
     import sagemaker
     from sagemaker.session import Session
+    from sagemaker.utils import name_from_base # appends datetime
     """
     
     """
@@ -867,7 +870,7 @@ def deploy_sm_lora_adapter(
     S3_KEY = f"Adapters/{key}/{ADAPTER_FILENAME}"
     S3_URI = f's3://{BUCKET}/{S3_KEY}'
 
-    ic_adapter_name = f'adapter-{endpoint_name}'
+    ic_adapter_name = f'adapter-{name_from_base("lmi-Hermes-FP8")}'
 
     boto_session = boto3.Session(region_name=REGION)
     s3_client = boto_session.client("s3")
@@ -938,6 +941,53 @@ def deploy_sm_lora_adapter(
     return adapter_inference, ic_adapter_name
 
 # ========================================
+# Register model
+# ========================================
+
+# def register_model(
+#     project,
+#     experiment_run_uid,
+#     version
+#     ):
+
+#     from mlrun.model import RunObject
+
+#     # model-purpose-artifacts
+#     model_key = "Hermes-4-14B-ContractExtractor-model-adapter"
+
+#     # Initialize the MLRun DB client
+#     db = mlrun.get_run_db()
+#     run_dict = db.read_run(uid=experiment_run_uid, project="finetune-legal-extractor")
+
+#     # Convert the dictionary to a RunObject for easier API access
+#     run = RunObject.from_dict(run_dict)
+#     run_parameters = run_dict['spec']['parameters']
+#     run_metrics = run_dict['status']['results']
+#     output = run.outputs['return'] # this is what was returned 
+
+#     # Pass in model_id, commit, hyperparameters, performance metrics
+#     #version = datetime.now().strftime("%Y%m%d_%H%M")
+
+#     model = project.log_model(
+#                     key=f'{model_key}-{version}',
+#                     tag="NA",
+#                     metrics=run_metrics,
+#                     parameters=run_parameters,
+#                     framework="Hugging Face model with adapter",
+#                     model_url="https://huggingface.co/JerroldK/H4-14b-contract-extractor-adapter",
+#                     labels={"model": "Hermes-4-14B"},
+#                     upload=False
+#                     )
+#     print('========== MODEL METADATA ==========')
+#     print(model.tag)
+#     print(model.labels)
+#     print(model.model_url)
+#     print(model.metrics)
+#     print(model.parameters)
+
+#     print(f"{model_key} model logged with version:\n {version}")
+
+# ========================================
 # Load test of model endpoint
 # ========================================
 
@@ -956,7 +1006,7 @@ def invoke_model(
     change max_token_length parameter outside this function before passing parameters
     id is an optional identifier to track to inhouse data
     """
-    print(parameters)
+    # print(parameters)
 
     prompt = [
         {"role": "system", "content": sys_prompt},
@@ -971,9 +1021,9 @@ def invoke_model(
 
     # ignore inference if contract_data is too long
     tokens = tokenizer.encode(chatml_prompt)
-    print(f"Document {id} prompt is {len(tokens)} tokens")
+    print(f"Document {id} prompt length is {len(tokens)} tokens")
     if len(tokens) >= max_prompt_l:
-        print(f"Document {id} prompt is over {max_prompt_l} tokens and ignored")
+        print(f"Document {id} prompt length is over {max_prompt_l} tokens and ignored")
         return -1
 
     chatml = {
@@ -1000,7 +1050,7 @@ def invoke_model(
 
         tokens = tokenizer.encode(full_response)
         l_t = len(tokens)
-        print(f'Doc {id} response tokens: {l_t}')
+        print(f'Doc {id} response length is {l_t} tokens ✅')
         # if l_t > 4900:
         #     print(f"Warning: Document {id} response is over 4900 tokens")
     except Exception as e:
@@ -1014,7 +1064,7 @@ def invoke_model(
         return -1
 
     # At this point we have not reached LLM generated tokens yet
-    print("---->", full_response_dict)
+    # print("---->", full_response_dict)
     inference = full_response_dict['generated_text']
     # if "<|im_end|>" in inference:   # this should not happen if we enforce json formatter
     #     inference = inference.replace("<|im_end|>", "").strip()
@@ -1091,18 +1141,16 @@ def process_multiple_row_testdata(
     prompt_tag,
     key,
     max_output_l=2000, # don't increase
-    batchsize=4
+    batchsize=5
 ):
 
     # get input data handle data paths
     artifact = project.get_artifact(key=eval_data_key, tag=eval_data_tag)
     artifact_latest_s3_path = artifact.target_path
 
-    print("s3_eval_path:")
-    s3_eval_path = f"s3://legal-llama-data/evaluation/{key}/"
-    #s3_eval_output_path = s3_eval_path + "output.parquet"
-    print(s3_eval_path)
-    #print(s3_eval_output_path)
+    # print("s3_eval_path:")
+    # s3_eval_path = f"s3://legal-llama-data/evaluation/{key}/"
+    # print(s3_eval_path)
 
     # get prompt and invoc config
     prompt_artifact = project.get_artifact(key=prompt_key, tag=prompt_tag)
@@ -1113,8 +1161,8 @@ def process_multiple_row_testdata(
         invoc_config['max_new_tokens'] = max_output_l
         print(f"max_new_tokens is too high and reduced to {max_output_l}")
 
-    print(invoc_config)
-    print()
+    # print(invoc_config)
+    # print()
     
     tokenizer = AutoTokenizer.from_pretrained("JerroldK/Hermes-4-14B-contract-extractor")
 
@@ -1177,32 +1225,36 @@ def process_multiple_row_testdata(
 
     # Write all data to S3 output path
     # Ensure your AWS credentials are configured in your environment
-    table = pa.table(all_results)
-    ds.write_dataset(
-        table, 
-        base_dir=s3_eval_path,
-        basename_template="inference_output{i}.parquet",
-        format="parquet"
-    )
+    # table = pa.table(all_results)
+    # ds.write_dataset(
+    #     table, 
+    #     base_dir=s3_eval_path,
+    #     basename_template="inference_output{i}.parquet",
+    #     format="parquet"
+    # )
 
-    pd_dataset_metrics = pd.DataFrame(dataset_metrics, index=[range(len(dataset_metrics))])
-    pd_dataset_metrics.to_json(f"{s3_eval_path}metrics.json", orient="records", lines=True)
+    # pd_dataset_metrics = pd.DataFrame(dataset_metrics, index=[range(len(dataset_metrics))])
+    # pd_dataset_metrics.to_json(f"{s3_eval_path}metrics.json", orient="records", lines=True)
 
-    print("Inference results and metrics written to S3 at:")
-    print(s3_eval_path)
-    
+    # print("Inference results and metrics written to S3 at:")
+    # print(s3_eval_path)
+    s3_eval_path = ""
+
     return dataset_metrics, s3_eval_path
 
 
 # ========================================
-# Update traffic gateway and test it
+# Update traffic gateway with rollback
 # ========================================
 def update_gateway_destination_sm(
     model_endpoint:str,
     model_adapter:str,
     template_uri:str,
-    rolling:bool
+    rolling:bool,
+    deployment_color:str
     ):
+
+    # Get infra var names from terraform out
     import subprocess
 
     parent_dir = os.path.abspath('../Terraform/') # this is called from notebook
@@ -1223,18 +1275,44 @@ def update_gateway_destination_sm(
         appconfig_confprof_cpid = values["appconfig_confprof_cpid"]
         appconfig_deploystrat_direct_id = values["appconfig_deploystrat_direct_id"]
         appconfig_deploystrat_rolling_id = values["appconfig_deploystrat_rolling_id"]
+        iam_arn_appconfig_cw_malarm_rollback = values["iam_appconfig_cw_malarm_rollback"]
+        
+        # Arns of clouwdwatch metric aalarms
+        cwa_1b = values["appconfig_cw_malarm_1b_arn"]
+        cwa_1w = values["appconfig_cw_malarm_1w_arn"]
         
     except KeyError as e:
         raise KeyError(f"Missing required configuration key: {e.args[0]}") from None
 
     ac_client = boto3.client("appconfig")
 
-    sysP_uri = template_uri
+    # Update the cloudwatch metric alarms attached to the AppConfig environment, so that rollback logic changes because of the new deployment color
+
+    if deployment_color == "Black":
+        monitors = [
+            {'AlarmArn': cwa_1b,
+             'AlarmRoleArn': iam_arn_appconfig_cw_malarm_rollback}
+        ]
+    elif deployment_color == "White":
+        monitors = [
+            {'AlarmArn': cwa_1w,
+             'AlarmRoleArn': iam_arn_appconfig_cw_malarm_rollback}
+        ]
+    print("======> Updating AppConfig environment in prepration for deployment")
+    response = ac_client.update_environment(
+        ApplicationId=appconfig_app_id,
+        EnvironmentId=appconfig_env_id,
+        Monitors = monitors
+    )
+
+    ################################
+    # Update the free-form configuration profile read in lambda
 
     configuration = {
         'model_endpoint': model_endpoint,
         'model_adapter': model_adapter,
-        'template_uri': sysP_uri
+        'template_uri': template_uri,
+        'deployment_color': deployment_color
         }
 
     host_config_response = ac_client.create_hosted_configuration_version(
@@ -1248,7 +1326,7 @@ def update_gateway_destination_sm(
 
     if rolling==False:
         deployment_strategy_id = appconfig_deploystrat_direct_id
-    else:
+    elif rolling==True:
         deployment_strategy_id = appconfig_deploystrat_rolling_id
 
     deploy = ac_client.start_deployment(
@@ -1264,14 +1342,89 @@ def update_gateway_destination_sm(
     for k,v in deploy.items():
         print(k, v)
 
-def rolling_run_test_every_5_mins(
+    print("")
+
+def test_lambda_few_rows(project,
+                       eval_data_key,
+                       eval_data_tag,
+                       l_client):
+    
+    # get input data handle data paths
+    artifact = project.get_artifact(key=eval_data_key, tag=eval_data_tag)
+    artifact_latest_s3_path = artifact.target_path
+    
+    # get test data
+    test_dataset = ds.dataset(
+        source=artifact_latest_s3_path, 
+        format="parquet")
+    
+    import random
+    testSize=2
+    test_dataset = test_dataset.to_table().to_pylist()
+    start = random.randint(0, len(test_dataset) - testSize)
+    test_dataset = test_dataset[start : start+testSize]
+
+    for doc in test_dataset:
+        document_id = doc['document_id']
+        contract_data = doc['text']
+        payload = json.dumps(
+            {
+            "contract": contract_data
+            }
+        )
+
+        print(f"Testing {document_id}: {contract_data[:10]}")
+
+        try:
+            response = l_client.invoke(
+                FunctionName="model_gateway",
+                InvocationType="RequestResponse",
+                Payload=payload
+            )
+            print("✅ Invocation to lambda is sent successfully")
+        except Exception as e:
+            print("====> Invocation to lambda failed for some reason")
+            print(e)
+
+        if response:
+            response_str = response["Payload"].read().decode("utf-8")
+            hypotheses_list = json.loads(response_str)
+            print('=======================================')
+            print(hypotheses_list)
+            print('=======================================')
+            
+def rolling_update_test_20mins(
     project,
-    endpoint_name,
-    adapter_name,
     eval_data_key,
     eval_data_tag,
-    prompt_key,
-    prompt_tag,
-    key
-):
-    None
+    ):
+    
+    import time
+    
+    interval = 5 * 60
+    duration = 20 * 60
+
+    start_time = time.monotonic()
+    scheduled_times = [
+        start_time + i * interval for i in range(duration // interval)
+    ]
+
+    l_client = boto3.client("lambda")
+
+    for scheduled_time in scheduled_times:
+        now = time.monotonic()
+
+        # Wait if we're early
+        if now < scheduled_time:
+            time.sleep(scheduled_time - now)
+        try:
+            test_lambda_few_rows(
+                project,
+                eval_data_key,
+                eval_data_tag,
+                l_client
+            )
+        except Exception as e:
+            print(e)
+
+    print("20 minute rolling test finished")

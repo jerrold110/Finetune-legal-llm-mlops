@@ -1,10 +1,22 @@
+/*
+https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/alarm-evaluation.html#alarm-evaluation-settings
+
+
+Period is the length of time to use to evaluate the metric or expression to create each individual data point for an alarm. It is expressed in seconds.
+
+Evaluation Periods is the number of the most recent periods, or data points, to evaluate when determining alarm state.
+
+Datapoints to Alarm is the number of data points within the Evaluation Periods that must be breaching to cause the alarm to go to the ALARM state. The breaching data points don't have to be consecutive, but they must all be within the last number of data points equal to Evaluation Period.
+*/
+
+
 locals {
-  # The period over which the specified statistic is applied. values are in seconds
-  deployment_alarm_period = 600
-  # The minimum numer of inferences over which the specified static is calculated
-  deployment_alarm_sample_size        = 10
-  deployment_alarm_evaluation_periods = 1
-  metric_namespace                    = "Contract_LLM_drift_metrics"
+  cw_alarm_period        = 600 # 10 mins
+  cw_alarm_eval_periods  = 1
+  cw_datapoints_to_alarm = 1
+  metric_namespace_dep   = "Short_contract_llm_drift_metrics"
+  cw_long_alarm_period   = 604800 # 1 week
+  metric_namespace_drift = "Long_contract_llm_drift_metrics"
 }
 
 
@@ -51,91 +63,62 @@ Attach alarm to appconfig env
 Rollback baby
 */
 
+# ===============================================================================
+# DEPLOYMENT ROLLBACK ALARMS
+# ===============================================================================
+
 # CARP metric alarm
 resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_black" {
   alarm_name          = "deployment-model-1b"
   comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = local.deployment_alarm_evaluation_periods
-  threshold           = 0.7 # If CARP drops below 0.7, activate the alarm
-  treat_missing_data  = "ignore"
+  period              = local.cw_alarm_period
+  evaluation_periods  = local.cw_alarm_eval_periods
+  datapoints_to_alarm = local.cw_datapoints_to_alarm
+  threshold           = 0.7
+  treat_missing_data  = "notBreaching" # alarm goes back to normal after the period passes
 
-  metric_query {
-    id          = "dm1"
-    expression  = "sum1/count1"
-    label       = "Average CARP value for configuration with Black deployment color"
-    return_data = "true"
-  }
-
-  metric_query {
-    id = "count1"
-
-    metric {
-      namespace   = local.metric_namespace
-      metric_name = "CARP_rouge2"
-      period      = local.deployment_alarm_period
-      stat        = "SampleCount"
-      dimensions = {
-        deployment_color = "Black"
-      }
-    }
-  }
-
-  metric_query {
-    id = "sum1"
-
-    metric {
-      namespace   = local.metric_namespace
-      metric_name = "CARP_rouge2"
-      period      = local.deployment_alarm_period
-      stat        = "Sum"
-      dimensions = {
-        deployment_color = "Black"
-      }
-    }
+  namespace   = local.metric_namespace_dep
+  metric_name = "CARP_rouge2"
+  statistic   = "Average"
+  dimensions = {
+    deployment_color = "Black"
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_white" {
   alarm_name          = "deployment-model-1w"
   comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = local.deployment_alarm_evaluation_periods
-  threshold           = 0.7 # If CARP drops below 0.7, activate the alarm
-  treat_missing_data  = "ignore"
+  period              = local.cw_alarm_period
+  evaluation_periods  = local.cw_alarm_eval_periods
+  datapoints_to_alarm = local.cw_datapoints_to_alarm
+  threshold           = 0.7
+  treat_missing_data  = "notBreaching" # alarm goes back to normal after the period 
 
-  metric_query {
-    id          = "dm1"
-    expression  = "sum1/count1"
-    label       = "Average CARP value for configuration with White deployment color"
-    return_data = "true"
-  }
-
-  metric_query {
-    id = "count1"
-
-    metric {
-      namespace   = local.metric_namespace
-      metric_name = "CARP_rouge2"
-      period      = local.deployment_alarm_period
-      stat        = "SampleCount"
-      dimensions = {
-        deployment_color = "White"
-      }
-    }
-  }
-
-  metric_query {
-    id = "sum1"
-
-    metric {
-      namespace   = local.metric_namespace
-      metric_name = "CARP_rouge2"
-      period      = local.deployment_alarm_period
-      stat        = "Sum"
-      dimensions = {
-        deployment_color = "White"
-      }
-    }
+  namespace   = local.metric_namespace_dep
+  metric_name = "CARP_rouge2"
+  statistic   = "Average"
+  dimensions = {
+    deployment_color = "White"
   }
 }
 
-# Label related metric alarm
+# Other alarms
+
+# ===============================================================================
+# MODEL DRIFT ALARMS (LONG-TERM MONITORING)
+# ===============================================================================
+
+# CARP metric alarm
+resource "aws_cloudwatch_metric_alarm" "drift_metric_carp" {
+  alarm_name          = "monitoring-model-1"
+  comparison_operator = "LessThanOrEqualToThreshold"
+  period              = local.cw_long_alarm_period
+  evaluation_periods  = local.cw_alarm_eval_periods
+  datapoints_to_alarm = local.cw_datapoints_to_alarm
+  threshold           = 0.7
+  treat_missing_data  = "ignore" # alarm state is preserved
+
+  namespace   = local.metric_namespace_drift
+  metric_name = "CARP_rouge2"
+  statistic   = "Average"
+}

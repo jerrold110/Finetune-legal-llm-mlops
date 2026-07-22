@@ -56,9 +56,8 @@ class InferenceError(Exception):
 
 logger = logging.getLogger() # All log outputs are captured in plain text in cloudwatch logs by default
 logger.setLevel("INFO")
-random_uuid = str(uuid.uuid4())[:10] # just 10 characters
 
-logger.info(f"✅ {random_uuid}: Imports and layers successful")
+logger.info(f"✅ Imports and layers successful")
 
 # Hard coded invocation parameters (MlRun does not store these on S3 for some reason)
 # Not necessary if we can pass such long parameters to MLRun
@@ -126,7 +125,7 @@ def invoke_endpoint_with_ica(sm_client, payload, endpoint_name, adapter_name) ->
         EndpointConnectionError,
         ReadTimeoutError,
     ) as e:
-        logger.exception(f"{random_uuid}: Failed to invoke SageMaker endpoint")
+        logger.exception(f"! Failed to invoke SageMaker endpoint")
         raise InferenceError("Endpoint invocation failed during invocation") from e
     
     # Process streaming response
@@ -145,15 +144,15 @@ def invoke_endpoint_with_ica(sm_client, payload, endpoint_name, adapter_name) ->
         raise InferenceError("Endpoint invocation failed during streaming") from e
     
     elapsed = time.perf_counter() - start 
-    logger.info(f"{random_uuid}:Inference completed in {elapsed:.2f}s")
+    logger.info(f"Inference completed in {elapsed:.2f}s")
     # Parse outer JSON response
     full_response = "".join(chunks)
-    logger.info(f"{random_uuid}:Received full response from endpoint. Length: {len(full_response)}")
+    logger.info(f"Received full response from endpoint. Length: {len(full_response)}")
 
     try:
         response_json = json.loads(full_response)
     except json.JSONDecodeError as e:
-        logger.exception(f"{random_uuid}:Model returned malformed JSON")
+        logger.exception(f"Model returned malformed JSON")
         raise InferenceError("Model output is not valid JSON") from e
     
     inference = response_json.get("generated_text")
@@ -165,7 +164,7 @@ def invoke_endpoint_with_ica(sm_client, payload, endpoint_name, adapter_name) ->
         inference_dict = json.loads(inference)
         hypotheses = inference_dict['Hypotheses'] # array of hypotheses
     except Exception as e:
-        logger.exception(f"{random_uuid}:Hypotheses field missing from model output")
+        logger.exception(f"! Hypotheses field missing from model output")
         raise InferenceError("Hypotheses field missing from model output")
     
     return hypotheses
@@ -184,13 +183,17 @@ def request_handler(input_contract):
     # decode the bytes since it was uploaded in bytes with utf8 format
     config = json.loads(config_bytes.decode("utf-8"))
 
-    logger.info(f"✅ {random_uuid}:\nConfiguration profile -> {config}")
+    logger.info(f"✅ Configuration profile -> {config}")
     elapsed = time.perf_counter() - start
-    logger.info(f"✅ {random_uuid}:\nConfiguration profile retrieved in {elapsed:.2f}s")
+    logger.info(f"✅ Configuration profile retrieved in {elapsed:.2f}s")
 
     target_endpoint, target_adapter = config['model_endpoint'], config['model_adapter']
     prompt_template_uri = config['template_uri']
-    logger.info(f"✅ {random_uuid}:\n\t{target_endpoint}\n\t{target_adapter}\n\t{prompt_template_uri}")
+    deployment_color = config['deployment_color']
+
+    print(config)
+    
+    logger.info(f"✅{target_endpoint}\n{target_adapter}\n{prompt_template_uri}")
 
     # Declare boto3 clients
     cw_client = boto3.client('cloudwatch', region_name='us-east-1')
@@ -211,7 +214,7 @@ def request_handler(input_contract):
     json_data = json.load(response["Body"])
     sys_prompt = json_data[0]['content']
     elapsed = time.perf_counter() - start
-    logger.info(f"✅ {random_uuid}:\nPrompt template downloaded in {elapsed:.2f}s")
+    logger.info(f"✅ Prompt template downloaded in {elapsed:.2f}s")
     
     # Combine with contract and parameters. Form payload
     parameters = get_invocation_params()
@@ -225,14 +228,18 @@ def request_handler(input_contract):
         target_adapter)
     # Validate that inference_json is a list of dictionaries
     if not isinstance(inference_json, list):
-        logger.info(f"❌ {random_uuid}:\ninference_json is not a list:\n{inference_json}")
-        raise TypeError(f"❌ {random_uuid}:\ninference_json is not a list:\n{inference_json}")
-    
+        logger.info(f"❌ inference_json is not a list:\n{inference_json}")
+        raise TypeError(f"❌ inference_json is not a list:\n{inference_json}")
+    # print('@==================================================================')
+    # print(inference_json)
+
     # Log model drift metrics to cloudwatch
+    # Can this bulky section be moved to after the response is returned to the user?
     start = time.perf_counter()
 
     t_s = datetime.now().replace(microsecond=0)
-    metricdata = []
+    shortmetricdata = []
+    longmetricdata = []
     carp_values = [] # Contract average rouge-2-precision (CARP)
     
     scorer = rouge_scorer.RougeScorer(['rouge2'], use_stemmer=False)
@@ -243,66 +250,100 @@ def request_handler(input_contract):
         
         if label != "not_mentioned":
             rouge2_prec = get_quote_drift_score(scorer, sc, input_contract)
-            logger.info(f"⚠️{random_uuid}:{rouge2_prec}")
-            logger.info(f"⚠️{random_uuid}:\n{sc}")
+            #logger.info(f"⚠️{random_uuid}:{rouge2_prec}")
+            #logger.info(f"⚠️{random_uuid}:\n{sc}")
 
             if isinstance(rouge2_prec, (float, int)):
                 carp_values.append(rouge2_prec)
             else:
                 print(f'carp_value is invalid for {hypothesis_id}')
 
-        data = {
+        short_data = {
             'MetricName': f'Hlabel_{hypothesis_id}',
             'Dimensions': [
-                {'Name': 'model_endpoint', 'Value': target_endpoint},
-                {'Name': 'adapter', 'Value': target_adapter},
+                {"Name": "label", "Value": label},
+                {"Name": "deployment_color", "Value": deployment_color},
+            ],
+            'Timestamp': t_s,
+            'Value':1,
+            'Unit':'Count'
+        }
+        shortmetricdata.append(short_data)
+
+        long_data = {
+            'MetricName': f'Hlabel_{hypothesis_id}',
+            'Dimensions': [
                 {"Name": "label", "Value": label},
             ],
             'Timestamp': t_s,
             'Value':1,
             'Unit':'Count'
         }
-        metricdata.append(data)
+        longmetricdata.append(short_data)
     # WATCH OUT FOR DIVIDE BY 0 errors
     if len(carp_values) == 0:
         avg_carp = 1.0
     else:
         avg_carp = sum(carp_values) / len(carp_values)
-    logger.info(f"⚠️{random_uuid}: Average CARP: {avg_carp}")
-    carp_data = {
+    logger.info(f"⚠️Average CARP: {avg_carp}")
+    short_carp_data = {
             'MetricName': f'CARP_rouge2',
-            'Dimensions': [
-                {'Name': 'model_endpoint', 'Value': target_endpoint},
-                {'Name': 'adapter', 'Value': target_adapter}
-            ],
+            'Dimensions': [{"Name": "deployment_color", "Value": deployment_color}],
             'Timestamp': t_s,
             'Value': avg_carp
         }
-    metricdata.append(carp_data)
+    shortmetricdata.append(short_carp_data)
+
+    long_carp_data = {
+            'MetricName': f'CARP_rouge2',
+            'Dimensions': [{"Name": "deployment_color", "Value": deployment_color}],
+            'Timestamp': t_s,
+            'Value': avg_carp
+        }
+    longmetricdata.append(long_carp_data)
+
+    # Short term metrics for deployment rollback
+    cw_client.put_metric_data(
+        Namespace='Short_contract_llm_drift_metrics',
+        MetricData=shortmetricdata,
+        Tags=[
+                {'Name': 'model_endpoint', 'Value': target_endpoint},
+                {'Name': 'adapter', 'Value': target_adapter},
+            ]
+    )
 
     cw_client.put_metric_data(
-        Namespace='Contract_LLM_drift_metrics',
-        MetricData=metricdata
+        Namespace="Long_contract_llm_drift_metrics",
+        MetricData=longmetricdata,
+        Tags=[
+                {'Name': 'model_endpoint', 'Value': target_endpoint},
+                {'Name': 'adapter', 'Value': target_adapter},
+            ]
     )
-    elapsed = time.perf_counter() - start
-    logger.info(f"✅ {random_uuid}:\nData drift metrics calculated in {elapsed:.2f}s")
 
-    # Log metrics to data firehose
+    # Long term metrics for model drift
+    elapsed = time.perf_counter() - start
+    logger.info(f"✅ Drift metrics calculated and sent in {elapsed:.2f}s")
+    print(shortmetricdata)
+
+    # Log metrics to data firehose + Arize/Langfuse
     # code goes here
 
     return inference_json
 
 def lambda_handler(event, context):
+    random_uuid = str(uuid.uuid4())
+    print('=========================================================')
+    print('0.2.1')
+    print(random_uuid)
+    print('=========================================================')
+    print(event)
+    
+    # response_data = {}
     #  response_data = {}
     input_contract = event['contract']
     response_data = request_handler(input_contract)
     
     #print(f"✅{random_uuid}:\n{event}")
           
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json"
-        },
-        "body": json.dumps(response_data)
-    }
+    return response_data

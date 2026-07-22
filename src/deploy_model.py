@@ -27,8 +27,11 @@ def deploy_new_model_adapter(
     test_dataset_tag,
     prompt,
     prompt_tag,
-    rolling_update:bool 
+    rolling_update:bool,
+    deployment_color:str
     ):
+
+    assert deployment_color in ("Black", "White")
 
     # Define key
     key = datetime.now().strftime("%Y%m%d_%H%M")
@@ -54,46 +57,55 @@ def deploy_new_model_adapter(
         base_ic_name,
         adapter_revision
     )
-    print("Logs are under: /aws/sagemaker/InferenceComponents/base-lmi-Hermes-FP8-2026-xxxxxx")
 
-    # Run load tests
-    # dataset_metrics, s3_eval_path = utils.process_multiple_row_testdata(
-    #     project,
-    #     endpoint_name,
-    #     adapter_name,
-    #     test_dataset,
-    #     test_dataset_tag,
-    #     prompt,
-    #     prompt_tag,
-    #     key
-    # )
+    # key = "20260714_1748"
+
+    # endpoint_name, adapter_name = "lmi-Hermes-FP8-2026-07-14-09-48-32-497","adapter-lmi-Hermes-FP8-2026-07-14-09-48-32-497"
+    # print("Logs are under: /aws/sagemaker/InferenceComponents/base-lmi-Hermes-FP8-2026-xxxxxx")
+
+    # Run load tests on new model/adapter
+    print("======> Beginning load test")
+    dataset_metrics, s3_eval_path = utils.process_multiple_row_testdata(
+        project,
+        endpoint_name,
+        adapter_name,
+        test_dataset,
+        test_dataset_tag,
+        prompt,
+        prompt_tag,
+        key
+    )
     
-    # print(f"✅ Endpoint passed load test with metrics:\n {dataset_metrics}")
-    # check_count = dataset_metrics['count'] >= 100
-    # check_accuracy = dataset_metrics['average_accuracy'] >= 0.8
-    # check_fmeasure = dataset_metrics['average_fmeasure'] >= 0.8
+    check_count = dataset_metrics['count'] >= 1 # in real this would be 100
+    check_accuracy = dataset_metrics['average_accuracy'] >= 0.7
+    check_fmeasure = dataset_metrics['average_fmeasure'] >= 0.7
 
-    # result = check_count and check_accuracy and check_fmeasure
-    # if not result:
-    #     raise Exception("Load test failed")
+    result = check_count and check_accuracy and check_fmeasure
+    if not result:
+        raise Exception(f"Load test failed with values/n check_count: {dataset_metrics['count']}\n check_accuracy: {dataset_metrics['average_accuracy']}\n check_fmeasure {dataset_metrics['average_fmeasure']}")
+    print(f"✅ Endpoint passed load test with metrics:\n {dataset_metrics}")
+    # endpoint_name = "lmi-Hermes-FP8-2026-07-21-06-34-06-259"
+    # adapter_name = "adapter-lmi-Hermes-FP8-2026-07-21-06-49-32-003"
+    # base_ic_name = "base-lmi-Hermes-FP8-2026-07-21-06-49-32-003"
 
-    # If tests pass, gradually shift traffic to new model by sending request to AppConfig with pre-configured deployment policy
-
+    # LAST OF ALL: Gradually shift traffic to new model by sending request to AppConfig with pre-configured deployment policy with rollback
     print("Sending request to AppConfig to change variables in Lambda")
     utils.update_gateway_destination_sm(
         model_endpoint=endpoint_name,
         model_adapter=adapter_name,
         template_uri="s3://legal-llama-data/llm_prompt/contract_extractor_prompt/20260610_1257/contract_extractor_prompt.json",
-        rolling=rolling_update
+        rolling=rolling_update,
+        deployment_color=deployment_color
     )
 
-    # This is to run a couple of tests for the rolling update, we should be running a test for direct and rolling
     if rolling_update:
-        
+        print("✅ Deployment workflow finished, rolling update in progress, now monitoring new model in preparation for rollback")
+    else:
+        print("✅ Direct deployment finished, now monitoring new model in preparation for rollback (if it exists)")
 
-    
     return {
-        'endpoint_name': base_ic_name,
+        'endpoint_name': endpoint_name,
+        'base_ic_name': base_ic_name,
         'adapter_name': adapter_name
     }
 

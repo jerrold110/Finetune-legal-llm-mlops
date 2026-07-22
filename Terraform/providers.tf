@@ -1,3 +1,8 @@
+locals {
+  aws_region = "us-east-1"
+}
+
+
 terraform {
   required_providers {
     aws = {
@@ -15,7 +20,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = local.aws_region
   #shared_config_files      = [""]
   #shared_credentials_files = [""]
 }
