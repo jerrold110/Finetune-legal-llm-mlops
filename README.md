@@ -3,18 +3,31 @@ This is a project is a production-grade LLMOps (MLOps) platform for designing, b
 
 https://stanfordnlp.github.io/contract-nli/
 
-# Why MLRun not MLFlow for MLOps?
+# Why MLRun not MLFlow ?
 MLflow is a tool for tracking machine learning experiments and managing models/datasets but does not have functionality for MLOps pipeline orchestration. MLRun has all the features of MLFlow and more; it is a framework for manging all the workflows in GenAI/ML pipelines including data preparation, model training, deployment, and continuous monitoring, that can be integrated with Kubernetes/Kubeflow for scalability. 
 
-**Main advantages**: https://docs.mlrun.org/en/stable/install-mlrun-ce/index.html
+### Main advantages: 
+https://docs.mlrun.org/en/stable/install-mlrun-ce/index.html
 
 There is a open-source community edition (CE) version and a managed version of MLRun provided by Iguazio. I am running the CE version on a local machine with a local docker setup which has not been supported since version 1.6 (I am using 1.10) as a substitute for the hosted version which would be used in a real project. 
 
 Projects are defined by YAML files which can be shared across machines allowing the recreation of a project, this also facilitates CI/CD integration with Github Actions.
 
-**How projects work with CI/CD**: https://docs.mlrun.org/en/stable/projects/automate-project-git-source.html https://docs.mlrun.org/en/stable/projects/project.html
+### How projects work with CI/CD:
+https://docs.mlrun.org/en/stable/projects/automate-project-git-source.html https://docs.mlrun.org/en/stable/projects/project.html
 
 ![MLRun overview](diagram/mlrun1.png)
+
+
+# MLOps pipelines created
+* **Register and process training experiment datasets**
+* **Experiment:** Evaluate base model
+* **Experiment:** Train adapter and evaluate model + adapter
+* **Register adapter into model registry**
+* **Deploy model and adapter, load test, switch traffic with rollback**
+* **Deploy adapter, load test, switch traffic with rollback**
+
+![Picture](diagram/pipeline1.png)
 
 # MLRun Architecture overview of local vs cloud
 Tha main components of MLRun are:
@@ -87,22 +100,77 @@ The artifacts produced during and after training are:
 # Training hardware limitations of g6e instance
 Hardware is a major limitation in this project due to the cost of accelerated compute instances. The prompts used for training go up to over 11,000 tokens, while the output can easily exceed 2000 tokens. As such, I have to use aggressive memory reduction methods during training to not run out of memory. I am using QLoRA, a 4-bit (NF4) form of mixed precision training using `bitsandbytes`, with a memory efficient 8-bit optimiser `paged_adamw_8bit`. 
 
-# Artifact repositories
-I use S3 object storage to store versioned datasets, prompt templates. I use Hugging Face Model Hug Repo to store the base model, and another Repo to store versions of the LoRA adapters.
+# Artifact repository storage layer
+I use S3 buckets to store versioned datasets, prompt templates. They should be versioned and regularly backed up in production.
+
+I use the Hugging Face Model Hug Repo to store the base model, and to store versions of the LoRA adapters designated by their commit hash.
 
 # Evaluation with vLLM and sagemaker training job
 Custom evaluation metrics incorporating traditional ML metrics such as accuracy/recall/precision are used to measure the "correctness" of the labels of each hypothesis, and the NLP metric ROUGE will be used to evaluate the quality of the source attribution quotes. These are the main metrics for model evaluation. 
 
 I also use a sagemaker training job to download the adapter that has been saved after the training job and use vLLM to create the inferences, once again making use of spot instances to save cost.
 
-# Serving and inference optimisation
+# Serving with vLLM and inference optimisation
 Sagemaker model endpoints will be used for infrastructure, the backend vLLM (which uses flash attention) will be used as the inference backend due to its balance of strong performance and ease of setting up (unlike other options like TensorRT-LLM). `Continuous batching and quantisation` of the `model weights & KV cache` at FP8 (nearly no loss of accuracy) are the main inference optimisation strategy. Since a model fits on a single 48gb GPU, parallelism strategies (tensor/pipeline parallelism) are not necessary - each gpu on an instance (g6e.12xlarge has 4 L40S gpus) will serve independently (data parallelism).
 
 I have to be very careful about balancing the batch size, `max-model-len`, `max-num-batched-tokens` parameters so that there are no memory bottlenecks during prefill or decode. These contract prompts are extremely long, memory has to be managed carefully.
 
+This is the configuration used for vLLM with benchmarks viewable under `/benchmark/`. The code is in Python specified for the LMI deployed on Sagemaker real-time endpoints in `src/utils.py`
+
+``` Python
+lmi_batch_config = {
+        "HF_MODEL_ID": HF_MODEL_ID,
+        "HF_TOKEN": os.environ['HF_TOKEN'], 
+        "HF_REVISION": HF_REVISION,
+
+        "SERVING_ENGINE": "Python", # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/conceptual_guide/lmi_engine.html
+        "OPTION_ROLLING_BATCH": "disable", #vllm disable
+        "OPTION_ASYNC_MODE":"true",
+        #"max" if enable tensor parallelism
+        # 1 enables data parallelism since 1 model per gpu
+        "TENSOR_PARALLEL_DEGREE": "1",
+        "OPTION_ENTRYPOINT":"djl_python.lmi_vllm.vllm_async_service", # this is from article
+        "OPTION_QUANTIZE":"fp8",
+        "OPTION_KV_CACHE_DTYPE":"fp8",
+        "OPTION_GPU_MEMORY_UTILIZATION":"0.95",
+        # "OPTION_ENABLE_CHUNKED_PREFILL":"false",
+        # "OPTION_ENABLE_PREFIX_CACHING":"false",
+        # "OPTION_ENFORCE_EAGER":"true",
+
+        "OPTION_MAX_MODEL_LEN":MAX_MODEL_LEN, # Max input + output = 6000 + 3000, this is a little buggy because requests close to but under 9000 tokens exceed this hard limit
+        "MAX_BATCH_SIZE": BATCH_SIZE, # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/starting-guide.html
+        "MAX_CONCURRENT_REQUESTS": "200",
+        "OPTION_MAX_ROLLING_BATCH_SIZE":BATCH_SIZE, # this is in the amazon articles for async serving
+        # --- ADVANCED SETTINGS -----
+        # https://docs.djl.ai/master/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html#advanced-vllm-configurations
+        "OPTION_MAX_NUM_BATCHED_TOKENS": BATCH_TOKENS,# Limits the number of tokens that can be processed in a single step during prefill
+        
+        # https://docs.vllm.ai/en/v0.8.3/serving/env_vars.html
+        "VLLM_ATTENTION_BACKEND":"FLASHINFER", # TORCH_SDPA  FLASH_ATTN
+        
+        # The maximum time it will wait to receive a chunk of data from the Python backend. This is when waiting for previous batch to complete.
+        "OPTION_PREDICT_TIMEOUT": str(60*15),
+        "OPTION_MODEL_LOADING_TIMEOUT": str(60*20),
+        "OPTION_TRUST_REMOTE_CODE": "true",
+        "SERVING_FAIL_FAST":"true",
+        
+        "OPTION_ENABLE_LORA": "true", # Enable for dynamic Lora adapters, reserves chunk of KV cache VRAM
+        "OPTION_MAX_LORA_RANK": "16",
+        "OPTION_PARALLEL_LOADING": "true", # parallel model loading when loading multiple model workers, inc temp memory footprint
+        "SERVING_JOB_QUEUE_SIZE": '500', # Default is 1000
+    }
+```
+
 https://docs.vllm.ai/en/latest/configuration/engine_args/?h=engine+argumen#modelconfig
 
 Speculative decoding may be included in the future.
+
+# Autoscaling
+Sagemaker endpoint autoscaling allows autoscaling and allows an autoscaling policy to by attached to an andpoint. 
+
+However similar to kubernetes, under load is often slow and insufficient for low latency demands because of the memory size of the models and the serving container. A recently implement solution by AWS is container caching:
+
+https://aws.amazon.com/blogs/machine-learning/introducing-container-caching-in-amazon-sagemaker-ai-for-faster-model-scaling/
 
 # Model evaluation with custom evaluation metrics
 These metrics are calcualted with Rouge which is a n-gram evaluation method for matching phrases that are supposed to be identical (as they are in this project). Rouge fmeasure (combination of precision and recall) is used to measure the similarity between the source quote and the actual quote. Accuracy is used to measure the performance of the model's avility to label the hypothesis with the right label: entailment, contradiction, not_mentioned. 
@@ -138,7 +206,6 @@ Appconfig and Cloudwatch, Cloudwatch metric  are used in conjunction with the La
 ![Picture](diagram/deploy3.png)
 
 
-
 # 
 
 # Observability
@@ -152,22 +219,6 @@ We track a few data points during operation: Traces, Logs, Model performance met
 ![Picture](diagram/overview3.png)
 
 ![Picture](diagram/overview2.png)
-
-
-# MLOps pipelines in this project
-* Register and process experiment datasets
-* Evaluate model
-* Train and evaluate model
-* Register model
-* Deploy model and adapter
-* Deploy adapter
-
-![Picture](diagram/pipeline1.png)
-
-* Model training job (produces adapter, loss graph on train & validation datasets)
-* Model evaluation (produces performance metrics)
-* Model deployment for new model + adapter with load tests and gradual traffic shifting
-* Model deployment for new adapter with load tests and gradual traffic shifting
 
 ## Data problem
 The data science problem explained.

@@ -296,7 +296,6 @@ def request_handler(input_contract):
 
     long_carp_data = {
             'MetricName': f'CARP_rouge2',
-            'Dimensions': [{"Name": "deployment_color", "Value": deployment_color}],
             'Timestamp': t_s,
             'Value': avg_carp
         }
@@ -305,20 +304,12 @@ def request_handler(input_contract):
     # Short term metrics for deployment rollback
     cw_client.put_metric_data(
         Namespace='Short_contract_llm_drift_metrics',
-        MetricData=shortmetricdata,
-        Tags=[
-                {'Name': 'model_endpoint', 'Value': target_endpoint},
-                {'Name': 'adapter', 'Value': target_adapter},
-            ]
+        MetricData=shortmetricdata
     )
 
     cw_client.put_metric_data(
         Namespace="Long_contract_llm_drift_metrics",
-        MetricData=longmetricdata,
-        Tags=[
-                {'Name': 'model_endpoint', 'Value': target_endpoint},
-                {'Name': 'adapter', 'Value': target_adapter},
-            ]
+        MetricData=longmetricdata
     )
 
     # Long term metrics for model drift

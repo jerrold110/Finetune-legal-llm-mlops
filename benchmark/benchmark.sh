@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Set the Tokenizer for TPS metrics 4/10
 export TOKENIZER="JerroldK/H4-14b-contract-extractor-adapter"
 
