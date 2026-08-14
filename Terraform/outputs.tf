@@ -1,3 +1,10 @@
+/*
+These variables can be read in the deployment pipeline with the subprocess module. 
+command: terraform output -json
+
+Check utils.py
+*/
+
 output "bucket_name" {
   value = aws_s3_bucket.main_bucket.bucket
 }
@@ -34,13 +41,3 @@ output "appconfig_cw_malarm_1w_arn" {
   value = aws_cloudwatch_metric_alarm.deployment_metric_carp_white.arn
 }
 
-
-
-
-
-/*
-These variables can be read in the deployment pipeline with the subprocess module. 
-command: terraform output -json
-
-Check utils.py
-*/

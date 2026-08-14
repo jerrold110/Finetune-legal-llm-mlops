@@ -18,19 +18,19 @@ terraform {
 
   required_version = ">= 1.2"
 }
-
+# Read aws creds from env variables, for Github actions
 provider "aws" {
   region = local.aws_region
   #shared_config_files      = [""]
   #shared_credentials_files = [""]
 }
 
-data "aws_ecr_authorization_token" "token" {}
+# data "aws_ecr_authorization_token" "token" {}
 
-provider "docker" {
-  registry_auth {
-    address  = data.aws_ecr_authorization_token.token.proxy_endpoint
-    username = data.aws_ecr_authorization_token.token.user_name
-    password = data.aws_ecr_authorization_token.token.password
-  }
-}
+# provider "docker" {
+#   registry_auth {
+#     address  = data.aws_ecr_authorization_token.token.proxy_endpoint
+#     username = data.aws_ecr_authorization_token.token.user_name
+#     password = data.aws_ecr_authorization_token.token.password
+#   }
+# }

@@ -9,14 +9,14 @@ Evaluation Periods is the number of the most recent periods, or data points, to 
 Datapoints to Alarm is the number of data points within the Evaluation Periods that must be breaching to cause the alarm to go to the ALARM state. The breaching data points don't have to be consecutive, but they must all be within the last number of data points equal to Evaluation Period.
 */
 
-
 locals {
   cw_alarm_period        = 600 # 10 mins
   cw_alarm_eval_periods  = 1
   cw_datapoints_to_alarm = 1
-  metric_namespace_dep   = "Short_contract_llm_drift_metrics"
+  # Prefixed namespaces to isolate metrics between environments
+  metric_namespace_dep   = "${var.ENV}-Short_contract_llm_drift_metrics"
   cw_long_alarm_period   = 604800 # 1 week
-  metric_namespace_drift = "Long_contract_llm_drift_metrics"
+  metric_namespace_drift = "${var.ENV}-Long_contract_llm_drift_metrics"
 }
 
 
@@ -36,7 +36,7 @@ data "aws_iam_policy_document" "appconfig_assume_role" {
 }
 
 resource "aws_iam_role" "appconfig_exec_role" {
-  name               = "appconfig-cloudwatch-discovery-role"
+  name               = "${var.ENV}-appconfig-cloudwatch-discovery-role"
   assume_role_policy = data.aws_iam_policy_document.appconfig_assume_role.json
 }
 
@@ -52,7 +52,7 @@ data "aws_iam_policy_document" "appconfig_permissions" {
 }
 
 resource "aws_iam_role_policy" "appconfig_permissions_attach" {
-  name   = "appconfig-cloudwatch-discovery-role-permissions"
+  name   = "${var.ENV}-appconfig-cw-discovery-role-permissions"
   role   = aws_iam_role.appconfig_exec_role.name
   policy = data.aws_iam_policy_document.appconfig_permissions.json
 }
@@ -69,7 +69,7 @@ Rollback baby
 
 # CARP metric alarm
 resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_black" {
-  alarm_name          = "deployment-model-1b"
+  alarm_name          = "${var.ENV}-deployment-model-1b"
   comparison_operator = "LessThanOrEqualToThreshold"
   period              = local.cw_alarm_period
   evaluation_periods  = local.cw_alarm_eval_periods
@@ -86,7 +86,7 @@ resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_black" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_white" {
-  alarm_name          = "deployment-model-1w"
+  alarm_name          = "${var.ENV}-deployment-model-1w"
   comparison_operator = "LessThanOrEqualToThreshold"
   period              = local.cw_alarm_period
   evaluation_periods  = local.cw_alarm_eval_periods
@@ -110,7 +110,7 @@ resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_white" {
 
 # CARP metric alarm
 resource "aws_cloudwatch_metric_alarm" "drift_metric_carp" {
-  alarm_name          = "monitoring-model-1"
+  alarm_name          = "${var.ENV}-monitoring-model-1"
   comparison_operator = "LessThanOrEqualToThreshold"
   period              = local.cw_long_alarm_period
   evaluation_periods  = local.cw_alarm_eval_periods

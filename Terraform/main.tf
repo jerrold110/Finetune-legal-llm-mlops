@@ -1,9 +1,51 @@
 locals {
-  lambda_function_name    = "model_gateway"
-  lambda_code_dir         = "../src/lambda"
-  appconfig_app_name      = "lambda_model_gateway"
+  lambda_function_name = "${var.ENV}-model_gateway"
+  #lambda_code_dir         = "../src/lambda" # this was for the lambda docker module
+  appconfig_app_name      = "${var.ENV}-lambda_model_gateway"
   appconfig_env_name      = "${local.appconfig_app_name}-environment"
   appconfig_confprof_name = "${local.appconfig_app_name}-conf"
+  s3_bucket_name          = "${var.ENV}-mlops-bucket-haviv"
+}
+
+# ==========================================
+# S3
+# ==========================================
+
+resource "aws_s3_bucket" "main_bucket" {
+  bucket = local.s3_bucket_name
+}
+
+resource "aws_s3_bucket_versioning" "versioning_example" {
+  bucket = aws_s3_bucket.main_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket_policy" "account_access" {
+  bucket = aws_s3_bucket.main_bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowAccountPrincipals"
+        Effect = "Allow"
+
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+
+        Action = "s3:*"
+
+        Resource = [
+          aws_s3_bucket.main_bucket.arn,       # The bucket itself
+          "${aws_s3_bucket.main_bucket.arn}/*" # objects in the bucket
+        ]
+      }
+    ]
+  })
 }
 
 # ==========================================
@@ -17,47 +59,28 @@ https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-integration-lam
 Configuration URL:
 https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-integration-lambda-extensions-add.html
 */
-module "docker_image" {
-  source = "terraform-aws-modules/lambda/aws//modules/docker-build"
 
-  create_ecr_repo = true
-  ecr_repo        = local.lambda_function_name
+resource "aws_lambda_function" "example" {
+  function_name = local.lambda_function_name
+  role          = aws_iam_role.lambda_exec_role.arn
+  package_type  = "Image"
+  image_uri     = "${var.ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${var.ENV}/traffic-gateway:${var.IMAGE_TAG}"
 
-  use_image_tag = true
-  image_tag     = "0.6.1"
+  # image_config {
+  #   entry_point = ["/lambda-entrypoint.sh"]
+  #   command     = ["app.handler"]
+  # }
 
-  source_path = local.lambda_code_dir
-
-}
-
-resource "aws_cloudwatch_log_group" "lambda_function" {
-  name              = "/aws/lambda/${local.lambda_function_name}"
-  retention_in_days = 1
-
-  tags = {
-    Environment = "development"
+  environment {
+    variables = {
+      configurationProfileURL = "http://localhost:2772/applications/${local.appconfig_app_name}/environments/${local.appconfig_env_name}/configurations/${local.appconfig_confprof_name}"
+    }
   }
+  timeout       = 300
+  architectures = ["x86_64"]
 }
 
-module "lambda_function" {
-  source = "terraform-aws-modules/lambda/aws"
 
-  function_name  = local.lambda_function_name
-  create_package = false
-
-  image_uri    = module.docker_image.image_uri
-  package_type = "Image"
-
-  create_role                       = false
-  lambda_role                       = aws_iam_role.lambda_exec_role.arn
-  use_existing_cloudwatch_log_group = true
-  timeout                           = 300
-  environment_variables = {
-    "configurationProfileURL" : "http://localhost:2772/applications/${local.appconfig_app_name}/environments/${local.appconfig_env_name}/configurations/${local.appconfig_confprof_name}"
-  }
-  # check .terraform/modules/lambda_function/variables.tf for data types
-  logging_log_group = aws_cloudwatch_log_group.lambda_function.name # not arn
-}
 
 # ==========================================
 # LAMBDA - IAM
@@ -150,9 +173,8 @@ resource "aws_appconfig_environment" "this" {
   name           = local.appconfig_env_name
   application_id = aws_appconfig_application.this.id
 
-  # ==========================================
-  # Attach CloudWatch metric alarms to Appconfig environment that will trigger rollback DURING deployment workflow with AppConfig.Client.update_environment() NOT BEFORE WHEN SPINNING UP
-  # ==========================================
+  # Attach CloudWatch metric alarms to Appconfig environment that will trigger rollback DURING deployment workflow with AppConfig.Client.update_environment()
+  # NOT BEFORE WHEN SPINNING UP. LEAVE THIS BLANK
 
   # monitor {
   #   alarm_arn      = aws_cloudwatch_metric_alarm.deployment_metric_carp_black.arn
@@ -167,9 +189,10 @@ resource "aws_appconfig_configuration_profile" "this" {
 }
 
 # Deployment strategy is linear 25% increase in intervals across 20 minutes (5 mins each)
+# These values should be environment specific, obviously shorter for development/test environments than staging/production environments
 resource "aws_appconfig_deployment_strategy" "rolling_update" {
   name                           = "${local.appconfig_app_name}-rolling-update-deployment"
-  deployment_duration_in_minutes = 20
+  deployment_duration_in_minutes = 20 # The total time for deployment
   final_bake_time_in_minutes     = 20 # The total time which to monitor alarms
   growth_type                    = "LINEAR"
   growth_factor                  = 25
