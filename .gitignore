@@ -267,12 +267,10 @@ terraform.rc
 /dataset_engineering/CUAD_v1
 /mlrun-data/mlrun.db
 
-# Lambda layer
-/src/lambda/layer/python
-
 # testing
 test_*
 past_notebooks
+compose_backup/*
 
 # Others
 credentials
