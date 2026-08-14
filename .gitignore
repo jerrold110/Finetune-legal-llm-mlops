@@ -273,3 +273,6 @@ terraform.rc
 # testing
 test_*
 past_notebooks
+
+# Others
+credentials

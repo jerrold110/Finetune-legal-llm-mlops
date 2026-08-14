@@ -1,48 +1,9 @@
+metadata:
+  name: legalcontractextractor
 kind: project
 spec:
-  functions:
-  - url: src/register_raw_dataset.py
-    name: raw-proc
-    kind: job
-    image: mlrun/mlrun
-    handler: process_raw
-  - url: src/evaluate_no_train.py
-    name: eval-notrain
-    kind: job
-    image: mlrun/mlrun
-    handler: evaluate_model
-  - url: src/evaluate_train.py
-    name: eval-train
-    kind: job
-    image: mlrun/mlrun
-    handler: evaluate_model_train
-  - url: src/test_log_plot.py
-    name: reg-plot
-    kind: job
-    image: mlrun/mlrun
-    handler: reg_plot
-  - url: src/deploy_model.py
-    name: deploy-model-adapter
-    kind: job
-    image: mlrun/mlrun
-    handler: deploy_new_model_adapter
-  - url: src/register_model.py
-    name: register-new-model
-    kind: job
-    image: mlrun/mlrun
-    handler: register_new_model
-  - url: src/deploy_adapter.py
-    name: deploy-adapter-existing-model
-    kind: job
-    image: mlrun/mlrun
-    handler: deploy_new_adapter
-  source: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
-  desired_state: online
-  origin_url: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
   conda: ''
-  description: A fine-tuned legal extractor LLM
-metadata:
-  name: finetune-legal-extractor
-  created: '2026-05-06T04:12:14.230955'
-status:
-  state: online
+  desired_state: online
+  description: MLOps system for legal contractor extractor LLM
+  origin_url: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
+  source: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
