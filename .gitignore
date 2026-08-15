@@ -266,6 +266,7 @@ terraform.rc
 /dataset_engineering/raw
 /dataset_engineering/CUAD_v1
 /mlrun-data/mlrun.db
+/images/lambda_gateway/opt/
 
 # testing
 test_*
@@ -274,3 +275,7 @@ compose_backup/*
 
 # Others
 credentials
+build_functions.ipynb
+test1.*
+test.*
+instances for models.txt
