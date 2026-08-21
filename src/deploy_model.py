@@ -1,61 +1,99 @@
 # ====== If run from notebooks, the working directory is /notebooks =====
 import os, sys
-parent_dir = os.path.abspath('..')
+
+parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 # ====== If run from notebooks, the working directory is /notebooks =====
 
 import src.utils as utils
+import src.utils_model_registry as model_reg
 from datetime import datetime
-############################################
-import mlrun
-# Loads AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and MLRUN_AWS_ROLE_ARN
 from dotenv import load_dotenv
-load_dotenv() 
-from pathlib import Path
 
-artifact_path = Path.cwd().parent
-artifact_path = str(artifact_path.as_posix()) # convert windows path to unix path
-artifact_path = "file://" + artifact_path
-p = mlrun.set_environment("http://localhost:8080", artifact_path=artifact_path)
-project = mlrun.load_project(name='finetune-legal-extractor', context="../") # project yaml must be in this directory
-############################################
+# Load environment variables into python variables
+load_dotenv()  # will not throw an error if .env not present
+ENV = os.environ["ENV"]
+ACCOUNT_ID = os.environ["ACCOUNT_ID"]
+MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
+
+# MLRun =================================================
+import mlrun
+
+mlrun.set_environment(api_path="http://localhost:30070")
+project = mlrun.load_project(
+    name="legalcontractextractor", context="../"
+)  # If running from notebook use ../
+# =======================================================
+
 
 def deploy_new_model_adapter(
     context,
-    adapter_revision,
+    # adapter_revision,
+    model,
+    model_tag,
     test_dataset,
     test_dataset_tag,
     prompt,
     prompt_tag,
-    rolling_update:bool,
-    deployment_color:str
-    ):
+    rolling_update: bool,
+    eval_dataset=None,  # For future use when running eval during canary
+    eval_dataset_tag=None,
+):
 
-    assert deployment_color in ("Black", "White")
+    # Check model tag status for deployment type
+    champion_exists = model_reg.model_exists(
+        project,
+        "champion",
+    )
+
+    if rolling_update:
+        if not champion_exists:
+            raise RuntimeError(
+                "rolling_update=True, but a champion model does not exist"
+            )
+        initial_champion = model_reg.get_model_by_label(
+            project,
+            "champion",
+        )
+    elif not rolling_update:
+        if champion_exists:
+            raise RuntimeError("rolling_update=False, but a champion model exists")
+
+    # Get the new model artifact
+    new_model = model_reg.get_model_by_tag(project, model, model_tag)
 
     # Define key
     key = datetime.now().strftime("%Y%m%d_%H%M")
 
     # Deploy model with base component for LoRA adapter
     endpoint_name, base_ic_name = utils.deploy_sm_lora_model(
-        instance="ml.g6e.2xlarge"
-        #batch_size="7",
-        #batch_tokens="30000" # throughput vs latency. Bottleneck is either memory (too high) or prefill (too low). 16000-40000
-        # 40000, 10 failed completely. Prefill bottleneck.
-        # 28600/31000, 8 is close, 1 fail. Decode bottleneck, not enough memory
-        # Next to try is batch size 7 with 28600(7150*4, 7150*5), to maximise throughput during decoding. Try to learn how to optimise memory.
-
-        # 31000, 7x5, fp8, 0.95. 4 failed out of 35. Decode bottleneck. 
-        # Reduce to 5000*5+1000~26000. 5 prefill at once, more memory for kvcache-decoding. This caused 6 out of 7 to fail. Prefill bottleneck
-        # Best for 7 is 30000/31000
+        instance="ml.g6e.4xlarge",
     )
+    """
+    batch_size="7",
+    batch_tokens="30000" # throughput vs latency. Bottleneck is either memory (too high) or prefill (too low). 16000-40000
+    40000, 10 failed completely. Prefill bottleneck.
+    28600/31000, 8 is close, 1 fail. Decode bottleneck, not enough memory
+    Next to try is batch size 7 with 28600(7150*4, 7150*5), to maximise throughput during decoding. Try to learn how to optimise memory.
+    31000, 7x5, fp8, 0.95. 4 failed out of 35. Decode bottleneck.
+    Reduce to 5000*5+1000~26000. 5 prefill at once, more memory for kvcache-decoding. This caused 6 out of 7 to fail. Prefill bottleneck
+    Best for 7 is 30000/31000
+    
+    """
 
-    # Deploy LORA adapter as IC adapter
+    # endpoint_name, base_ic_name = (
+    #     "lmi-Hermes-FP8-2026-08-17-08-09-37-454",
+    #     "base-lmi-Hermes-FP8-2026-08-17-08-09-37-454",
+    # )
+
+    adapter_revision = new_model.metrics["return"]["commit_oid:"]
+
+    # Deploy LORA adapter as IC adapter, starts a new sagemaker endpoint with IC adapter
     adapter, adapter_name = utils.deploy_sm_lora_adapter(
         key,
         endpoint_name,
         base_ic_name,
-        adapter_revision
+        adapter_revision,
     )
 
     # key = "20260714_1748"
@@ -64,7 +102,7 @@ def deploy_new_model_adapter(
     # print("Logs are under: /aws/sagemaker/InferenceComponents/base-lmi-Hermes-FP8-2026-xxxxxx")
 
     # Run load tests on new model/adapter
-    print("======> Beginning load test")
+    print("======> Beginning model pre-deployment validation")
     dataset_metrics, s3_eval_path = utils.process_multiple_row_testdata(
         project,
         endpoint_name,
@@ -73,39 +111,64 @@ def deploy_new_model_adapter(
         test_dataset_tag,
         prompt,
         prompt_tag,
-        key
+        key,
     )
-    
-    check_count = dataset_metrics['count'] >= 1 # in real this would be 100
-    check_accuracy = dataset_metrics['average_accuracy'] >= 0.7
-    check_fmeasure = dataset_metrics['average_fmeasure'] >= 0.7
+
+    check_count = dataset_metrics["count"] >= 1  # in prod this would be 100
+    check_accuracy = dataset_metrics["average_accuracy"] >= 0.7
+    check_fmeasure = dataset_metrics["average_fmeasure"] >= 0.7
 
     result = check_count and check_accuracy and check_fmeasure
     if not result:
-        raise Exception(f"Load test failed with values/n check_count: {dataset_metrics['count']}\n check_accuracy: {dataset_metrics['average_accuracy']}\n check_fmeasure {dataset_metrics['average_fmeasure']}")
-    print(f"✅ Endpoint passed load test with metrics:\n {dataset_metrics}")
-    # endpoint_name = "lmi-Hermes-FP8-2026-07-21-06-34-06-259"
-    # adapter_name = "adapter-lmi-Hermes-FP8-2026-07-21-06-49-32-003"
-    # base_ic_name = "base-lmi-Hermes-FP8-2026-07-21-06-49-32-003"
-
-    # LAST OF ALL: Gradually shift traffic to new model by sending request to AppConfig with pre-configured deployment policy with rollback
-    print("Sending request to AppConfig to change variables in Lambda")
-    utils.update_gateway_destination_sm(
-        model_endpoint=endpoint_name,
-        model_adapter=adapter_name,
-        template_uri="s3://legal-llama-data/llm_prompt/contract_extractor_prompt/20260610_1257/contract_extractor_prompt.json",
-        rolling=rolling_update,
-        deployment_color=deployment_color
+        raise Exception(
+            f"model pre-deployment validation failed with values \n check_count: {dataset_metrics['count']}\n check_accuracy: {dataset_metrics['average_accuracy']}\n check_fmeasure {dataset_metrics['average_fmeasure']}"
+        )
+    print(
+        f"✅ Endpoint passed model pre-deployment validation with metrics:\n {dataset_metrics}"
     )
 
-    if rolling_update:
-        print("✅ Deployment workflow finished, rolling update in progress, now monitoring new model in preparation for rollback")
-    else:
-        print("✅ Direct deployment finished, now monitoring new model in preparation for rollback (if it exists)")
+    # Gradually shift traffic to new model by sending request to AppConfig with pre-configured deployment policy with rollback
+
+    try:
+        if not rolling_update:
+            # promote new model to champion
+            model_reg.promote_champion(project, new_model)
+        elif rolling_update:
+            # Promote new model to challenger
+            model_reg.promote_challenger(project, new_model)
+            print(
+                "✅ Deployment workflow finished, rolling update in progress, now monitoring new model in preparation for rollback"
+            )
+            utils.update_gateway_destination_sm(
+                project,
+                model_endpoint=endpoint_name,
+                model_adapter=adapter_name,
+                # This is hardcoded for development, didn't buy domain for mlrun
+                template_uri="s3://sand-mlops-bucket-haviv/data/llm_prompt/contract_extractor_prompt/20260814_1626/contract_extractor_prompt.json",
+                rolling=rolling_update,
+                test_dataset=test_dataset,
+                test_dataset_tag=test_dataset_tag,
+            )
+            # Demote old model to standby, promote new model to champion from challenger
+            model_reg.demote_model(project, initial_champion)
+            model_reg.promote_champion(project, new_model)
+            print(
+                "✅ Rolling deployment finished, now monitoring new model in preparation for appconfig rollback for remaining duratino of bake time (if it exists)"
+            )
+
+    except Exception as e:
+        # Return model tags to original state
+        print("! Error. Returning models to initial states")
+        model_reg.promote_champion(project, initial_champion)
+        model_reg.demote_model(project, new_model)
+
+        print(f"🚨 Deployment was unsuccessful: {e}")
+
+    # Create a new long-term alarm for the deployment with (endpoint_name, adapter_name)
+    utils.create_drift_alarm(endpoint_name, adapter_name, ENV)
 
     return {
-        'endpoint_name': endpoint_name,
-        'base_ic_name': base_ic_name,
-        'adapter_name': adapter_name
+        "endpoint_name": endpoint_name,
+        "base_ic_name": base_ic_name,
+        "adapter_name": adapter_name,
     }
-
