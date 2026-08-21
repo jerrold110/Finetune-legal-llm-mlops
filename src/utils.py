@@ -1,27 +1,3 @@
-"""
-This file contains all the modularised MLOps components for use and reuse in different MLOps workflows/pipelines.
-
-Each MLOps pipeline is a combination of different components strung together to create a unique pipeline.
-
-Internal Pipelines:
-Experiment: Run evaluation on base model
-Experiment: Train new model and run evaluation on fine-tuned model
-Register model in model registry
-
-External pipelines:
-Deploy SM model endpoint
-Update SM model endpoint
-Deploy inference component adapter (LoRA adapter)
-Update Inference component adapter (Routing gateway refer to docs)
-
-Pipelines not in this file:
-Register train/validation/test datasets
-Data processing with update operations on datasets
-Register prompt template and invocation configuration
-Reinforcement learning fine-tuning pipelines
-
-"""
-
 # import sys
 # print(sys.executable)
 # exit(0)
