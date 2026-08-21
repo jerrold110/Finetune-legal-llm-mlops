@@ -14,6 +14,8 @@ aiohttp==3.14.3
     # via
     #   aiobotocore
     #   aiohttp-retry
+    #   datasets
+    #   fsspec
     #   kubernetes
     #   mlrun
     #   s3fs
@@ -27,17 +29,13 @@ aiosignal==1.4.0
 aiosmtplib==3.0.2
     # via mlrun
 annotated-doc==0.0.5
-    # via
-    #   fastapi
-    #   typer
+    # via fastapi
 annotated-types==0.8.0
     # via pydantic
 antlr4-python3-runtime==4.9.3
     # via omegaconf
 anyio==4.14.2
-    # via
-    #   httpx
-    #   starlette
+    # via starlette
 asttokens==3.0.2
     # via stack-data
 attrs==25.4.0
@@ -63,8 +61,6 @@ botocore==1.41.5
     #   s3transfer
 certifi==2026.7.22
     # via
-    #   httpcore
-    #   httpx
     #   kfp-server-api
     #   kubernetes
     #   requests
@@ -72,7 +68,6 @@ charset-normalizer==3.4.9
     # via requests
 click==8.4.2
     # via
-    #   huggingface-hub
     #   mlrun
     #   nltk
     #   uvicorn
@@ -83,14 +78,13 @@ colorama==0.4.6
     #   click
     #   ipython
     #   tqdm
-    #   typer
 comm==0.2.3
     # via ipykernel
 contourpy==1.3.3
     # via matplotlib
 cycler==0.12.1
     # via matplotlib
-datasets==1.1.1
+datasets==2.14.4
     # via -r requirements.in
 debugpy==1.8.21
     # via ipykernel
@@ -106,7 +100,7 @@ dependency-injector==4.49.1
     # via mlrun
 deprecated==1.3.1
     # via mlrun
-dill==0.4.1
+dill==0.3.7
     # via
     #   datasets
     #   multiprocess
@@ -127,9 +121,9 @@ fastjsonschema==2.22.1
     # via nbformat
 filelock==3.32.2
     # via
-    #   datasets
     #   huggingface-hub
     #   torch
+    #   transformers
 fonttools==4.63.0
     # via matplotlib
 frozenlist==1.8.0
@@ -138,6 +132,7 @@ frozenlist==1.8.0
     #   aiosignal
 fsspec==2025.7.0
     # via
+    #   datasets
     #   huggingface-hub
     #   mlrun
     #   s3fs
@@ -165,26 +160,18 @@ grpcio==1.83.0
 grpcio-tools==1.80.0
     # via v3io-frames
 h11==0.16.0
-    # via
-    #   httpcore
-    #   uvicorn
-hf-xet==1.5.2
-    # via huggingface-hub
-httpcore==1.0.9
-    # via httpx
-httpx==0.28.1
-    # via huggingface-hub
-huggingface-hub==1.26.0
+    # via uvicorn
+huggingface-hub==0.36.2
     # via
     #   -r requirements.in
     #   accelerate
+    #   datasets
     #   peft
     #   tokenizers
     #   transformers
 idna==3.18
     # via
     #   anyio
-    #   httpx
     #   requests
     #   yarl
 importlib-metadata==6.11.0
@@ -283,7 +270,7 @@ multidict==6.7.1
     #   aiobotocore
     #   aiohttp
     #   yarl
-multiprocess==0.70.19
+multiprocess==0.70.15
     # via
     #   datasets
     #   pathos
@@ -336,6 +323,7 @@ packaging==24.2
     # via
     #   accelerate
     #   bitsandbytes
+    #   datasets
     #   huggingface-hub
     #   ipykernel
     #   matplotlib
@@ -354,7 +342,7 @@ pandocfilters==1.5.1
     # via nbconvert
 parso==0.8.7
     # via jedi
-pathos==0.3.5
+pathos==0.3.1
     # via sagemaker
 peft==0.20.0
     # via -r requirements.in
@@ -431,6 +419,7 @@ pywin32==312
 pyyaml==6.0.3
     # via
     #   accelerate
+    #   datasets
     #   huggingface-hub
     #   kubernetes
     #   mlrun
@@ -456,19 +445,19 @@ requests==2.34.2
     # via
     #   datasets
     #   docker
+    #   huggingface-hub
     #   kubernetes
     #   mlrun
     #   nuclio-jupyter
     #   requests-oauthlib
     #   sagemaker
+    #   transformers
     #   v3io
     #   v3io-frames
 requests-oauthlib==2.0.0
     # via kubernetes
 rich==14.3.4
-    # via
-    #   sagemaker-core
-    #   typer
+    # via sagemaker-core
 rouge-score==0.1.2
     # via -r requirements.in
 rpds-py==2026.6.3
@@ -497,8 +486,6 @@ setuptools==83.0.0
     #   grpcio-tools
     #   mlrun
     #   torch
-shellingham==1.5.4
-    # via typer
 six==1.17.0
     # via
     #   google-pasta
@@ -557,12 +544,10 @@ traitlets==5.15.1
     #   nbclient
     #   nbconvert
     #   nbformat
-transformers==5.14.1
+transformers==4.57.6
     # via
     #   -r requirements.in
     #   peft
-typer==0.27.0
-    # via transformers
 typing-extensions==4.16.0
     # via
     #   aiohttp
