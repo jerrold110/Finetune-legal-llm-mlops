@@ -15,22 +15,22 @@ docker login \
     "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
 
 # Test image ==============================
-Repo_name="${ENV}/my-busybox-aws"
+# Repo_name="${ENV}/my-busybox-aws"
 
-docker build \
-  -t my-busybox-docker:latest \
-  --build-arg AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  --build-arg AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  --build-arg HF_TOKEN="$HF_TOKEN" \
-  ./images/test_image
+# docker build \
+#   -t my-busybox-docker:latest \
+#   --build-arg AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+#   --build-arg AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+#   --build-arg HF_TOKEN="$HF_TOKEN" \
+#   ./images/test_image
 
-aws ecr create-repository \
---repository-name $Repo_name \
---region us-east-1
+# aws ecr create-repository \
+# --repository-name $Repo_name \
+# --region us-east-1
 
-docker tag my-busybox-docker:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
+# docker tag my-busybox-docker:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
 
-docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
+# docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
 
 # MLRun Image ==============================
 Repo_name_mlrun="${ENV}/mlrun-myjob"
@@ -48,11 +48,14 @@ docker tag mlrun-myjob:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${R
 docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:${IMAGE_TAG}"
 
 # Lambda traffic handler ==============================
+echo "Building and pushing Lambda traffic handler..."
 Repo_name_lambda="${ENV}/traffic-gateway"
-
+# windows docker attaches metadata to image manifest which lambda doesn't understand
 docker build \
-  --provenance=false \  # windows docker attaches metadata to image manifest which lambda doesn't understand
+  --provenance=false \
   --platform=linux/amd64 \
+  --build-arg ENV="$ENV" \
+  --no-cache \
   -t traffic-gateway:latest \
   ./images/lambda_gateway
 

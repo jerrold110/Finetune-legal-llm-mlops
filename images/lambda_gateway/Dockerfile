@@ -16,6 +16,8 @@ COPY model_gateway.py ${LAMBDA_TASK_ROOT}/
 # https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-integration-lambda-extensions-config.html
 ENV AWS_APPCONFIG_EXTENSION_POLL_INTERVAL_SECONDS="10"
 ENV AWS_APPCONFIG_EXTENSION_POLL_TIMEOUT_MILLIS="3000"
+ARG ENV
+ENV ENV=${ENV}
 
 # 4. Point to your Lambda handler
 CMD ["model_gateway.lambda_handler"]
