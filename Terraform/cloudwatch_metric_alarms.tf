@@ -10,13 +10,10 @@ Datapoints to Alarm is the number of data points within the Evaluation Periods t
 */
 
 locals {
-  cw_alarm_period        = 600 # 10 mins
-  cw_alarm_eval_periods  = 1
-  cw_datapoints_to_alarm = 1
-  # Prefixed namespaces to isolate metrics between environments
+  cw_alarm_period        = 300 # 5 mins
+  cw_alarm_eval_periods  = 1   # 2 periods of trigger required for alarm to sound off
+  cw_datapoints_to_alarm = 1   # trigger if 5 data points breach within a 5 min period
   metric_namespace_dep   = "${var.ENV}-Short_contract_llm_drift_metrics"
-  cw_long_alarm_period   = 604800 # 1 week
-  metric_namespace_drift = "${var.ENV}-Long_contract_llm_drift_metrics"
 }
 
 
@@ -57,19 +54,28 @@ resource "aws_iam_role_policy" "appconfig_permissions_attach" {
   policy = data.aws_iam_policy_document.appconfig_permissions.json
 }
 
-/*
-Update model with color
-Attach alarm to appconfig env
-Rollback baby
-*/
-
 # ===============================================================================
 # DEPLOYMENT ROLLBACK ALARMS
 # ===============================================================================
 
-# CARP metric alarm
-resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_black" {
-  alarm_name          = "${var.ENV}-deployment-model-1b"
+# There are no dimensions
+# Contract average rouge-3 fmeasure (CARF)
+# resource "aws_cloudwatch_metric_alarm" "deployment_metric_carf" {
+#   alarm_name          = "${var.ENV}-deployment-model-1"
+#   comparison_operator = "LessThanOrEqualToThreshold"
+#   period              = local.cw_alarm_period
+#   evaluation_periods  = local.cw_alarm_eval_periods
+#   datapoints_to_alarm = local.cw_datapoints_to_alarm
+#   threshold           = 0.7
+#   treat_missing_data  = "notBreaching" # alarm goes back to normal after the period passes
+
+#   namespace   = local.metric_namespace_dep
+#   metric_name = "CARF_3"
+#   statistic   = "Average"
+# }
+
+resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp" {
+  alarm_name          = "${var.ENV}-deployment-model-1"
   comparison_operator = "LessThanOrEqualToThreshold"
   period              = local.cw_alarm_period
   evaluation_periods  = local.cw_alarm_eval_periods
@@ -78,47 +84,27 @@ resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_black" {
   treat_missing_data  = "notBreaching" # alarm goes back to normal after the period passes
 
   namespace   = local.metric_namespace_dep
-  metric_name = "CARP_rouge2"
+  metric_name = "CARP_3"
   statistic   = "Average"
-  dimensions = {
-    deployment_color = "Black"
-  }
 }
-
-resource "aws_cloudwatch_metric_alarm" "deployment_metric_carp_white" {
-  alarm_name          = "${var.ENV}-deployment-model-1w"
-  comparison_operator = "LessThanOrEqualToThreshold"
-  period              = local.cw_alarm_period
-  evaluation_periods  = local.cw_alarm_eval_periods
-  datapoints_to_alarm = local.cw_datapoints_to_alarm
-  threshold           = 0.7
-  treat_missing_data  = "notBreaching" # alarm goes back to normal after the period 
-
-  namespace   = local.metric_namespace_dep
-  metric_name = "CARP_rouge2"
-  statistic   = "Average"
-  dimensions = {
-    deployment_color = "White"
-  }
-}
-
-# Other alarms
 
 # ===============================================================================
 # MODEL DRIFT ALARMS (LONG-TERM MONITORING)
+# These should be manually added with every release and be unique to the endpoint_name 
+# so as to prevent retrospective calculation with previous versions
 # ===============================================================================
 
 # CARP metric alarm
-resource "aws_cloudwatch_metric_alarm" "drift_metric_carp" {
-  alarm_name          = "${var.ENV}-monitoring-model-1"
-  comparison_operator = "LessThanOrEqualToThreshold"
-  period              = local.cw_long_alarm_period
-  evaluation_periods  = local.cw_alarm_eval_periods
-  datapoints_to_alarm = local.cw_datapoints_to_alarm
-  threshold           = 0.7
-  treat_missing_data  = "ignore" # alarm state is preserved
+# resource "aws_cloudwatch_metric_alarm" "drift_metric_carp" {
+#   alarm_name          = "${var.ENV}-monitoring-model-1"
+#   comparison_operator = "LessThanOrEqualToThreshold"
+#   period              = local.cw_long_alarm_period
+#   evaluation_periods  = local.cw_alarm_eval_periods
+#   datapoints_to_alarm = local.cw_datapoints_to_alarm
+#   threshold           = 0.7
+#   treat_missing_data  = "ignore" # alarm state is preserved
 
-  namespace   = local.metric_namespace_drift
-  metric_name = "CARP_rouge2"
-  statistic   = "Average"
-}
+#   namespace   = local.metric_namespace_drift
+#   metric_name = "CARP_rouge2"
+#   statistic   = "Average"
+# }

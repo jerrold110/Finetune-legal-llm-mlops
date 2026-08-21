@@ -66,20 +66,18 @@ resource "aws_lambda_function" "example" {
   package_type  = "Image"
   image_uri     = "${var.ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${var.ENV}/traffic-gateway:${var.IMAGE_TAG}"
 
-  # image_config {
-  #   entry_point = ["/lambda-entrypoint.sh"]
-  #   command     = ["app.handler"]
-  # }
-
   environment {
     variables = {
       configurationProfileURL = "http://localhost:2772/applications/${local.appconfig_app_name}/environments/${local.appconfig_env_name}/configurations/${local.appconfig_confprof_name}"
     }
   }
-  timeout       = 300
+  timeout       = 450 # 7.5 mins
   architectures = ["x86_64"]
 }
-
+# image_config {
+#   entry_point = ["/lambda-entrypoint.sh"]
+#   command     = ["app.handler"]
+# }
 
 
 # ==========================================
@@ -173,13 +171,11 @@ resource "aws_appconfig_environment" "this" {
   name           = local.appconfig_env_name
   application_id = aws_appconfig_application.this.id
 
-  # Attach CloudWatch metric alarms to Appconfig environment that will trigger rollback DURING deployment workflow with AppConfig.Client.update_environment()
-  # NOT BEFORE WHEN SPINNING UP. LEAVE THIS BLANK
-
-  # monitor {
-  #   alarm_arn      = aws_cloudwatch_metric_alarm.deployment_metric_carp_black.arn
-  #   alarm_role_arn = aws_iam_role.appconfig_exec_role.arn
-  # }
+  # Attach CloudWatch metric alarms to Appconfig environment that will trigger rollback DURING deployment workflow with ac_client.start_deployment()
+  monitor {
+    alarm_arn      = aws_cloudwatch_metric_alarm.deployment_metric_carp.arn
+    alarm_role_arn = aws_iam_role.appconfig_exec_role.arn
+  }
 }
 
 resource "aws_appconfig_configuration_profile" "this" {
@@ -192,8 +188,8 @@ resource "aws_appconfig_configuration_profile" "this" {
 # These values should be environment specific, obviously shorter for development/test environments than staging/production environments
 resource "aws_appconfig_deployment_strategy" "rolling_update" {
   name                           = "${local.appconfig_app_name}-rolling-update-deployment"
-  deployment_duration_in_minutes = 20 # The total time for deployment
-  final_bake_time_in_minutes     = 20 # The total time which to monitor alarms
+  deployment_duration_in_minutes = var.DEPLOYMENT_TIME_M # The total time for deployment
+  final_bake_time_in_minutes     = var.BAKE_TIME_M       # The total time which to monitor alarms after deployment
   growth_type                    = "LINEAR"
   growth_factor                  = 25
   replicate_to                   = "NONE"
