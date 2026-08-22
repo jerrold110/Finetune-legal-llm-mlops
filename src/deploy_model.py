@@ -150,8 +150,11 @@ def deploy_new_model_adapter(
                 test_dataset_tag=test_dataset_tag,
             )
             # Demote old model to standby, promote new model to champion from challenger
-            model_reg.demote_model(project, initial_champion)
-            model_reg.promote_champion(project, new_model)
+            model_reg.promote_challenger_demote_champion(
+                project,
+                initial_champion,
+                new_model,
+            )
             print(
                 "✅ Rolling deployment finished, now monitoring new model in preparation for appconfig rollback for remaining duratino of bake time (if it exists)"
             )
