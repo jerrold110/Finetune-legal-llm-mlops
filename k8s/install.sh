@@ -19,6 +19,7 @@ kubectl --namespace mlrun create secret generic ecr-build-secret \
 #  --from-literal=region=us-east-1
 
 echo "===> Installing mlrun with helm..."
+# Lite version
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
@@ -27,6 +28,9 @@ helm --namespace mlrun \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=localhost \
+    --set pipelines.enabled=false \
+    --set kube-prometheus-stack.enabled=false \
+    --set spark-operator.enabled=false \
     mlrun-ce/mlrun-ce
 
 # Credentials for pods to pull images

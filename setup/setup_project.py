@@ -1,6 +1,6 @@
-# if project.yaml does not exist
+# check is if project.yaml exists in cwd
+# run this from main wd
 from pathlib import Path
-
 file_path = Path("./project.yaml")
 
 if file_path.is_file():
@@ -16,6 +16,6 @@ project = mlrun.new_project(
     user_project=False, 
     init_git=False, 
     description="MLOps system for legal contractor extractor LLM",
-    overwrite=True,
+    overwrite=False,
 )
 print(project.spec.get_code_path())

@@ -1,4 +1,6 @@
-# This is run from main working directory
+"""
+Run this file from main directory
+"""
 import mlrun
 
 mlrun.set_environment(api_path="http://localhost:30070")
