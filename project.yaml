@@ -1,13 +1,13 @@
-kind: project
 metadata:
   created: '2026-08-14T06:18:22.596000'
   name: legalcontractextractor
 status:
   state: online
+kind: project
 spec:
-  desired_state: online
+  conda: ''
   origin_url: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
-  source: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
+  desired_state: online
   functions:
   - url: src/register_raw_dataset.py
     name: raw-proc
@@ -39,5 +39,5 @@ spec:
     kind: job
     image: mlrun/mlrun
     handler: deploy_new_adapter
-  conda: ''
+  source: git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main
   description: MLOps system for legal contractor extractor LLM
