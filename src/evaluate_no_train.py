@@ -31,16 +31,36 @@ MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
 HF_TOKEN = os.environ["HF_TOKEN"]
 IMAGE_TAG = os.getenv(
     key="IMAGE_TAG",
-    default="latest",
-)  # in CI/CD this will be the github_sha env variable
+)  # in CI/CD this will be a unique variable from the github actions run. local dev uses "latest"
 
 # MLRun =================================================
 import mlrun
 
-mlrun.set_environment(api_path="http://localhost:30070")
-project = mlrun.load_project(
-    name="legalcontractextractor", context="../"
-)  # If running from notebook use ../
+"""
+Set the environment for execution:
+Running inside the cluster - MLRun already knows the right address from environment variable 
+https://docs.mlrun.org/en/1.11.x/setup-guide.html
+
+Running locally, use the mlrun-api service NodePort
+kubectl --namespace mlrun get svc | grep -i api
+"""
+
+print("Debug. variables for confirmation")
+print("cwd:", os.getcwd())
+print("__file__ dir:", os.path.dirname(os.path.abspath(__file__)))
+print("contents:", os.listdir("."))
+
+if os.environ.get("MLRUN_DBPATH"):
+    print("Detected K8s environment")
+    project = mlrun.load_project(
+        name="legalcontractextractor", context="/home/mlrun_code/"
+    )
+else:
+    print("Detected Local environment")
+    mlrun.set_environment(api_path="http://localhost:30070")
+    # Context must be where project.yaml is, if running from notebook use ../
+    project = mlrun.load_project(name="legalcontractextractor", context="../")
+
 # =======================================================
 
 
