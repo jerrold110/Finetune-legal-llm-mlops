@@ -6,18 +6,11 @@ Uses environment variables
 Remember that AWS_ENDPOINT_URL_S3 is set to http://seaweedfs-s3.mlrun.svc.cluster.local:8333 by default, which mlrun may be using for internal functions (artifact logging)
 https://docs.mlrun.org/en/stable/store/datastore.html#s3
 
-
 """
-
-# ====== If run from notebooks, the working directory is /notebooks =====
-import os, sys
-
-parent_dir = os.path.abspath("..")
-sys.path.append(parent_dir)
-# ====== If run from notebooks, the working directory is /notebooks =====
 
 # Imports
 # import src.utils as utils
+import os, sys
 import torch
 from datetime import datetime
 from datasets import Dataset
@@ -63,9 +56,14 @@ if os.environ.get("MLRUN_DBPATH"):
     )
 else:
     print("Detected Local environment")
+    # ====== If run from notebooks, the working directory is /notebooks =====
+    parent_dir = os.path.abspath("..")
+    sys.path.append(parent_dir)
+    # ====== This is necessary for importing other files from src when running locally =====
     mlrun.set_environment(api_path="http://localhost:30070")
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
+    
 
 
 # _original_endpoint = os.environ.get("AWS_ENDPOINT_URL_S3")
