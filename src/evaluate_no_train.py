@@ -2,6 +2,11 @@
 This starts a sagemaker training job that copies the directory in /src/scripts/evaluate
 
 Uses environment variables
+
+Remember that AWS_ENDPOINT_URL_S3 is set to http://seaweedfs-s3.mlrun.svc.cluster.local:8333 by default, which mlrun may be using for internal functions (artifact logging)
+https://docs.mlrun.org/en/stable/store/datastore.html#s3
+
+
 """
 
 # ====== If run from notebooks, the working directory is /notebooks =====
@@ -19,6 +24,7 @@ from datasets import Dataset
 from transformers import AutoTokenizer
 import pyarrow as pa
 import pyarrow.dataset as ds
+import pyarrow.fs as pafs
 import json
 import boto3
 from dotenv import load_dotenv
@@ -130,7 +136,17 @@ def prepare_notrain_datasets(
         """
         data_pointer = mlrun.get_dataitem(data_uri)
         s3_path = data_pointer.url
-        raw_dataset = ds.dataset(s3_path, format="parquet")  # pyarrow FileSystemDataset
+        # ignore AWS_ENDPOINT_URL_S3
+        s3_path = s3_path.replace("s3://", "")
+        s3_fs = pafs.S3FileSystem(
+            region="us-east-1",
+            endpoint_override="https://s3.amazonaws.com",
+        )
+        raw_dataset = ds.dataset(
+            s3_path,
+            format="parquet",
+            filesystem=s3_fs,
+        )  # pyarrow FileSystemDataset
 
         # Validate data and its schema
         print(f"Validating data at {s3_path}:")
