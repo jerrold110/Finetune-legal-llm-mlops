@@ -67,6 +67,21 @@ else:
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
 
+
+_original_endpoint = os.environ.get("AWS_ENDPOINT_URL_S3")
+os.environ["AWS_ENDPOINT_URL_S3"] = "https://s3.amazonaws.com"
+
+try:
+    prompt_artifact = project.get_artifact(key="contract_extractor_prompt", tag="20260814_1626")
+    prompt_template = prompt_artifact.read_prompt()
+finally:
+    if _original_endpoint is not None:
+        os.environ["AWS_ENDPOINT_URL_S3"] = _original_endpoint
+    else:
+        os.environ.pop("AWS_ENDPOINT_URL_S3", None)
+
+raise KeyError
+
 # =======================================================
 
 
