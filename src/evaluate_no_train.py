@@ -3,7 +3,7 @@ This starts a sagemaker training job that copies the directory in /src/scripts/e
 
 Uses environment variables
 
-Remember that AWS_ENDPOINT_URL_S3 is set to http://seaweedfs-s3.mlrun.svc.cluster.local:8333 by default, which mlrun may be using for internal functions (artifact logging)
+Remember that AWS_ENDPOINT_URL_S3 is change from http://seaweedfs-s3.mlrun.svc.cluster.local:8333 to https://s3.amazonaws.com
 https://docs.mlrun.org/en/stable/store/datastore.html#s3
 
 """
@@ -28,11 +28,8 @@ ENV = os.environ["ENV"]
 ACCOUNT_ID = os.environ["ACCOUNT_ID"]
 MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
 HF_TOKEN = os.environ["HF_TOKEN"]
-IMAGE_TAG = os.getenv(
-    key="IMAGE_TAG",
-)  # in CI/CD this will be a unique variable from the github actions run. local dev uses "latest"
 
-# MLRun =================================================
+# MLRun setup =================================================
 import mlrun
 
 """
@@ -44,11 +41,10 @@ Running locally, use the mlrun-api service NodePort
 kubectl --namespace mlrun get svc | grep -i api
 """
 
-print("Debug. variables for confirmation")
-print("cwd:", os.getcwd())
-print("__file__ dir:", os.path.dirname(os.path.abspath(__file__)))
-print("contents:", os.listdir("."))
-
+# print("Debug. variables for confirmation")
+# print("cwd:", os.getcwd())
+# print("__file__ dir:", os.path.dirname(os.path.abspath(__file__)))
+# print("contents:", os.listdir("."))
 if os.environ.get("MLRUN_DBPATH"):
     print("Detected K8s environment")
     project = mlrun.load_project(
@@ -64,24 +60,7 @@ else:
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
     
-
-
-# _original_endpoint = os.environ.get("AWS_ENDPOINT_URL_S3")
-# os.environ["AWS_ENDPOINT_URL_S3"] = "https://s3.amazonaws.com"
-
-# try:
-#     prompt_artifact = project.get_artifact(key="contract_extractor_prompt", tag="20260814_1626")
-#     prompt_template = prompt_artifact.read_prompt()
-# finally:
-#     if _original_endpoint is not None:
-#         os.environ["AWS_ENDPOINT_URL_S3"] = _original_endpoint
-#     else:
-#         os.environ.pop("AWS_ENDPOINT_URL_S3", None)
-prompt_artifact = project.get_artifact(key="contract_extractor_prompt", tag="20260814_1626")
-prompt_template = prompt_artifact.read_prompt()
-print(prompt_template)
-
-raise KeyError # THIS IS WORKING!!
+# import other utils files
 
 # =======================================================
 

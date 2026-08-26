@@ -4,27 +4,51 @@ This reads from the MLRun metadata database
 No environment variables needed
 """
 
-# ====== If run from notebooks, the working directory is /notebooks =====
 import os, sys
-
-parent_dir = os.path.abspath("..")
-sys.path.append(parent_dir)
-# ====== If run from notebooks, the working directory is /notebooks =====
-
-# Imports
-import mlrun
-from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
 
-# MLRun =================================================
+# Load environment variables into python variables
+load_dotenv()  # will not throw an error if .env not present
+ENV = os.environ["ENV"]
+ACCOUNT_ID = os.environ["ACCOUNT_ID"]
+MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
+HF_TOKEN = os.environ["HF_TOKEN"]
+
+# MLRun setup =================================================
 import mlrun
 
-mlrun.set_environment(api_path="http://localhost:30070")
-project = mlrun.load_project(
-    name="legalcontractextractor", context="../"
-)  # If running from notebook use ../
-# =======================================================
+"""
+Set the environment for execution:
+Running inside the cluster - MLRun already knows the right address from environment variable 
+https://docs.mlrun.org/en/1.11.x/setup-guide.html
 
+Running locally, use the mlrun-api service NodePort
+kubectl --namespace mlrun get svc | grep -i api
+"""
+
+# print("Debug. variables for confirmation")
+# print("cwd:", os.getcwd())
+# print("__file__ dir:", os.path.dirname(os.path.abspath(__file__)))
+# print("contents:", os.listdir("."))
+if os.environ.get("MLRUN_DBPATH"):
+    print("Detected K8s environment")
+    project = mlrun.load_project(
+        name="legalcontractextractor", context="/home/mlrun_code/"
+    )
+else:
+    print("Detected Local environment")
+    # ====== If run from notebooks, the working directory is /notebooks =====
+    parent_dir = os.path.abspath("..")
+    sys.path.append(parent_dir)
+    # ====== This is necessary for importing other files from src when running locally =====
+    mlrun.set_environment(api_path="http://localhost:30070")
+    # Context must be where project.yaml is, if running from notebook use ../
+    project = mlrun.load_project(name="legalcontractextractor", context="../")
+    
+# import other utils files
+
+# =======================================================
 
 def register_new_model(
     context,

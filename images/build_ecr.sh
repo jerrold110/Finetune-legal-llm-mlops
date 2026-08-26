@@ -36,6 +36,8 @@ docker login \
 Repo_name_mlrun="${ENV}/mlrun-myjob"
 
 docker build \
+  --provenance=false \
+  --platform=linux/amd64 \
   -t mlrun-myjob:latest \
   ./images/mlrun_function
 

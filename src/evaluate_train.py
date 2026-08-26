@@ -7,17 +7,14 @@ This saves a model adapter on hugging face, and its location + commit hash in th
 This saves the training graph in the job run data on S3
 
 Uses environment variables
+
+Remember that AWS_ENDPOINT_URL_S3 is change from http://seaweedfs-s3.mlrun.svc.cluster.local:8333 to https://s3.amazonaws.com
+https://docs.mlrun.org/en/stable/store/datastore.html#s3
 """
-
-# ====== If run from notebooks, the working directory is /notebooks =====
-import os, sys
-
-parent_dir = os.path.abspath("..")
-sys.path.append(parent_dir)
-# ====== If run from notebooks, the working directory is /notebooks =====
 
 # Imports
 # import src.utils as utils
+import os, sys
 import torch
 from datetime import datetime
 from datasets import Dataset
@@ -34,18 +31,40 @@ ENV = os.environ["ENV"]
 ACCOUNT_ID = os.environ["ACCOUNT_ID"]
 MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
 HF_TOKEN = os.environ["HF_TOKEN"]
-IMAGE_TAG = os.getenv(
-    key="IMAGE_TAG",
-    default="latest",
-)  # in CI/CD this will be the github_sha env variable
 
-# MLRun =================================================
+# MLRun setup =================================================
 import mlrun
 
-mlrun.set_environment(api_path="http://localhost:30070")
-project = mlrun.load_project(
-    name="legalcontractextractor", context="../"
-)  # If running from notebook use ../
+"""
+Set the environment for execution:
+Running inside the cluster - MLRun already knows the right address from environment variable 
+https://docs.mlrun.org/en/1.11.x/setup-guide.html
+
+Running locally, use the mlrun-api service NodePort
+kubectl --namespace mlrun get svc | grep -i api
+"""
+
+# print("Debug. variables for confirmation")
+# print("cwd:", os.getcwd())
+# print("__file__ dir:", os.path.dirname(os.path.abspath(__file__)))
+# print("contents:", os.listdir("."))
+if os.environ.get("MLRUN_DBPATH"):
+    print("Detected K8s environment")
+    project = mlrun.load_project(
+        name="legalcontractextractor", context="/home/mlrun_code/"
+    )
+else:
+    print("Detected Local environment")
+    # ====== If run from notebooks, the working directory is /notebooks =====
+    parent_dir = os.path.abspath("..")
+    sys.path.append(parent_dir)
+    # ====== This is necessary for importing other files from src when running locally =====
+    mlrun.set_environment(api_path="http://localhost:30070")
+    # Context must be where project.yaml is, if running from notebook use ../
+    project = mlrun.load_project(name="legalcontractextractor", context="../")
+    
+# import other utils files
+
 # =======================================================
 
 

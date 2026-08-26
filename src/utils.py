@@ -1,13 +1,9 @@
-# import sys
-# print(sys.executable)
-# exit(0)
 # torch has to be imported first before transformers and sagemaker, becuase they import torch internally.
 # this will initialise the DLLs first
 import torch
 
 import boto3
 from botocore.config import Config
-
 from transformers import AutoTokenizer
 
 # from datasets import Dataset
@@ -440,7 +436,7 @@ def invoke_model(
         full_response_dict = json.loads(full_response)
     except Exception as e:
         print(f"! Error Document {id} during json.load() Part B:", e)
-        #print(full_response) # this throws errors
+        # print(full_response) # this throws errors
         return -1
 
     # At this point we have not reached LLM generated tokens yet
@@ -769,15 +765,16 @@ def update_gateway_destination_sm(
                     raise RuntimeError(
                         f"Deployment ended in state {state}. "
                         f"Latest event: {event_log[-1] if event_log else 'None'}"
-                    )\
-                    
+                    )
                 # If the function has already finished stop polling
                 if future.done():
-                    print("✅rolling_update_test_20mins() finished. Now entering Baking time")
+                    print(
+                        "✅rolling_update_test_20mins() finished. Now entering Baking time"
+                    )
                     break
 
                 time.sleep(10)
-            
+
             future.result()
     else:
         print(

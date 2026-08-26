@@ -17,7 +17,6 @@ def process_raw(
 
     # permitted formats csv|parquet|pq|tsdb|kv
     # https://docs.mlrun.org/en/latest/api/mlrun.execution/index.html#mlrun.execution.MLClientCtx.log_dataset
-    print("Hello from process_raw")
 
     # input_uri is an s3 identifier to a file. Returns pandas dataframe
     df = input_uri.as_df()  # mlrun.get_dataitem(input_uri).as_df()
