@@ -659,6 +659,8 @@ def update_gateway_destination_sm(
 
     parent_dir = os.path.abspath("../Terraform/")  # this is called from notebook
 
+    # These variables need to be baked into the image as environment variables during build
+    # Terraform -> Build MLRun function image -> Push image -> Deploy to prod
     result = subprocess.run(
         ["terraform", "output", "-json"],
         capture_output=True,
