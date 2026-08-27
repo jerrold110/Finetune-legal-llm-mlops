@@ -60,7 +60,9 @@ class InferenceError(Exception):
     """Raised when inference fails."""
 
 
-logger = logging.getLogger()  # All log outputs are captured in plain text in cloudwatch logs by default
+logger = (
+    logging.getLogger()
+)  # All log outputs are captured in plain text in cloudwatch logs by default
 logger.setLevel("INFO")
 
 logger.info("✅ Imports and layers successful")
@@ -206,7 +208,7 @@ def invoke_endpoint_with_ica(
         hypotheses = inference_dict["Hypotheses"]  # array of hypotheses
     except Exception as e:
         logger.exception("! Hypotheses field missing from model output")
-        raise InferenceError("Hypotheses field missing from model output")
+        raise InferenceError(e)
 
     return hypotheses
 
@@ -330,14 +332,8 @@ def request_handler(input_contract):
         long_data = {
             "MetricName": f"Hlabel_{hypothesis_id}",
             "Dimensions": [
-                {
-                    "Name": "model_endpoint",
-                    "Value": target_endpoint
-                },
-                {
-                    "Name": "model_adapter",
-                    "Value": target_adapter
-                },
+                {"Name": "model_endpoint", "Value": target_endpoint},
+                {"Name": "model_adapter", "Value": target_adapter},
                 {
                     "Name": "label",
                     "Value": label,
@@ -370,15 +366,15 @@ def request_handler(input_contract):
         "Timestamp": t_s,
         "Value": avg_carp,
         "Dimensions": [
-                {
-                    "Name": "model_endpoint",
-                    "Value": target_endpoint
-                },
-                {
-                    "Name": "model_adapter",
-                    "Value": target_adapter
-                },
-            ],
+            {
+                "Name": "model_endpoint",
+                "Value": target_endpoint,
+            },
+            {
+                "Name": "model_adapter",
+                "Value": target_adapter,
+            },
+        ],
     }
     longmetricdata.append(long_carp_data)
 
