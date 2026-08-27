@@ -1,6 +1,7 @@
 def checkfoo(
     context,
-    project,
+    key,
+    tag
 ):
     """
     This is a function used for smoke tests used in lieu of a unit/integration/system tests.
@@ -45,9 +46,6 @@ def checkfoo(
     print("Test 4 passed")
 
     # Test 5
-    key = "test_model_artifact"
-    tag = "0.0.0.0"
-
     project.log_model(
         key=key,
         tag=tag,
