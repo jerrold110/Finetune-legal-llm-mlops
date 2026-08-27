@@ -4,7 +4,8 @@ This reads from the MLRun metadata database
 No environment variables needed
 """
 
-import os, sys
+import os
+import sys
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -20,7 +21,7 @@ import mlrun
 
 """
 Set the environment for execution:
-Running inside the cluster - MLRun already knows the right address from environment variable 
+Running inside the cluster - MLRun already knows the right address from environment variable
 https://docs.mlrun.org/en/1.11.x/setup-guide.html
 
 Running locally, use the mlrun-api service NodePort
@@ -45,10 +46,10 @@ else:
     mlrun.set_environment(api_path="http://localhost:30070")
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
-    
 # import other utils files
 
 # =======================================================
+
 
 def register_new_model(
     context,
@@ -92,8 +93,7 @@ def register_new_model(
     model = project.log_model(
         key=f"{model_key}",
         tag=version,  # Unique
-        labels={"status": "standby",
-                "type": "Hermes-4 14B adapter"},
+        labels={"status": "standby", "type": "Hermes-4 14B adapter"},
         metrics=run_metrics,
         parameters=run_parameters,
         model_url=oid,

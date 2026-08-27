@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -14,7 +15,7 @@ import mlrun
 
 """
 Set the environment for execution:
-Running inside the cluster - MLRun already knows the right address from environment variable 
+Running inside the cluster - MLRun already knows the right address from environment variable
 https://docs.mlrun.org/en/1.11.x/setup-guide.html
 
 Running locally, use the mlrun-api service NodePort
@@ -39,7 +40,7 @@ else:
     mlrun.set_environment(api_path="http://localhost:30070")
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
-    
+
 # import other utils files
 import src.utils as utils
 import src.utils_model_registry as model_reg
@@ -99,7 +100,6 @@ def deploy_new_model_adapter(
     31000, 7x5, fp8, 0.95. 4 failed out of 35. Decode bottleneck.
     Reduce to 5000*5+1000~26000. 5 prefill at once, more memory for kvcache-decoding. This caused 6 out of 7 to fail. Prefill bottleneck
     Best for 7 is 30000/31000
-    
     """
 
     # endpoint_name, base_ic_name = (

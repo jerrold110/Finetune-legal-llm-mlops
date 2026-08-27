@@ -18,3 +18,4 @@ ipython
 iprogress
 rouge-score
 matplotlib
+pylint

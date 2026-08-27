@@ -1,26 +1,19 @@
 # torch has to be imported first before transformers and sagemaker, becuase they import torch internally.
 # this will initialise the DLLs first
 import torch
-
 import boto3
 from botocore.config import Config
 from transformers import AutoTokenizer
 
 # from datasets import Dataset
-# import pandas as pd
-# import pyarrow as pa
 import pyarrow.dataset as ds
-
 import json
 from concurrent.futures import ThreadPoolExecutor
-
 from dotenv import load_dotenv
+import os
+from src import utils_evaluate_model as evaluate_model
 
 load_dotenv()
-import os
-import mlrun
-
-from src import utils_evaluate_model as evaluate_model
 
 # import utils_evaluate_model as evaluate_model # for tests
 
@@ -71,7 +64,7 @@ def deploy_sm_lora_model(
     """
     Model required an invocataion component adapter, unlike a base standalone model
 
-    Autoscaling: 
+    Autoscaling:
     Scaling policies can be attach to a model after the endpoint has been deployed. 
     https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling-add-code-apply.html
     https://aws.amazon.com/blogs/machine-learning/amazon-sagemaker-inference-launches-faster-auto-scaling-for-generative-ai-models/
@@ -79,7 +72,6 @@ def deploy_sm_lora_model(
     Realtime endpoint adapters:
     https://docs.djl.ai/master/docs/demos/aws/sagemaker/large-model-inference/sample-llm/multi_lora_gemma3_4b.html#clean-up-resources
     https://docs.aws.amazon.com/sagemaker/latest/dg/realtime-endpoints-adapt.html
-    
     """
 
     region = "us-east-1"
@@ -233,7 +225,7 @@ def deploy_sm_lora_model(
         },
     )
 
-    print(f"✅ Autoscaling policy successfully added")
+    print("✅ Autoscaling policy successfully added")
 
     # Return the endpoint name and base ic name to attach IC adapter
     return endpoint_name, base_ic_name
@@ -561,7 +553,7 @@ def process_multiple_row_testdata(
     testSize = 5
     test_dataset = test_dataset.to_table().to_pylist()
     start = random.randint(0, len(test_dataset) - testSize)
-    test_dataset = test_dataset[start : start + testSize]
+    test_dataset = test_dataset[start: start + testSize]
 
     MINI_BATCH_SIZE = batchsize  # or whatever, it goes to the queue
     all_results = {
@@ -575,7 +567,7 @@ def process_multiple_row_testdata(
     for i in range(0, len(test_dataset), MINI_BATCH_SIZE):
 
         # Prepare the minibatch
-        mini_batch = test_dataset[i : i + MINI_BATCH_SIZE]
+        mini_batch = test_dataset[i: i + MINI_BATCH_SIZE]
         batch_number = (i // MINI_BATCH_SIZE) + 1
         print(
             f"\n--- Starting Mini-Batch {batch_number} ({len(mini_batch)} requests) ---"
@@ -702,9 +694,9 @@ def update_gateway_destination_sm(
     version_number = host_config_response["VersionNumber"]
 
     deployment_strategy_id = ""
-    if rolling == False:
+    if rolling is False:
         deployment_strategy_id = appconfig_deploystrat_direct_id
-    elif rolling == True:
+    elif rolling is True:
         deployment_strategy_id = appconfig_deploystrat_rolling_id
 
     deploy = ac_client.start_deployment(
@@ -844,7 +836,7 @@ def test_lambda_few_rows(
     testSize = 4
     test_dataset = test_dataset.to_table().to_pylist()
     start = random.randint(0, len(test_dataset) - testSize)
-    test_dataset = test_dataset[start : start + testSize]
+    test_dataset = test_dataset[start: start + testSize]
     print(len(test_dataset))
 
     for doc in test_dataset:

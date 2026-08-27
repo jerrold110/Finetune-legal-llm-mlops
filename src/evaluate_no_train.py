@@ -10,7 +10,8 @@ https://docs.mlrun.org/en/stable/store/datastore.html#s3
 
 # Imports
 # import src.utils as utils
-import os, sys
+import os
+import sys
 import torch
 from datetime import datetime
 from datasets import Dataset
@@ -34,7 +35,7 @@ import mlrun
 
 """
 Set the environment for execution:
-Running inside the cluster - MLRun already knows the right address from environment variable 
+Running inside the cluster - MLRun already knows the right address from environment variable
 https://docs.mlrun.org/en/1.11.x/setup-guide.html
 
 Running locally, use the mlrun-api service NodePort
@@ -59,7 +60,7 @@ else:
     mlrun.set_environment(api_path="http://localhost:30070")
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
-    
+
 # import other utils files
 
 # =======================================================

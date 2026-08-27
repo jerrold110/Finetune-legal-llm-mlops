@@ -14,6 +14,7 @@ Takedown:
 - Manually delete
 """
 
+
 # Get model artifact of model with champion/challenger tag (for error handling during deployment)
 def get_model_by_label(project, status: str):
     """
@@ -49,6 +50,7 @@ def get_model_by_tag(
 ):
 
     return project.get_artifact(key=model, tag=tag)
+
 
 # Update operations
 def promote_champion(
@@ -90,10 +92,7 @@ def promote_challenger(
         raise KeyError(f"Challenger model already exists: {chall_tag}")
 
 
-def demote_model(
-    project,
-    model
-):
+def demote_model(project, model):
     """
     This is especially useful for canary deployment when a model challenger fails.
     """
@@ -104,11 +103,8 @@ def demote_model(
         write_spec_copy=False,
     )
 
-def promote_challenger_demote_champion(
-    project,
-    old_model,
-    new_model
-):
+
+def promote_challenger_demote_champion(project, old_model, new_model):
     """
     This is used in canary deployment. Have to create challenger model first, for integrity check
     """

@@ -1,6 +1,8 @@
-import os, sys
+import os
+import sys
 from datetime import datetime
 from dotenv import load_dotenv
+import mlrun
 
 # Load environment variables into python variables
 load_dotenv()  # will not throw an error if .env not present
@@ -10,11 +12,11 @@ MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
 HF_TOKEN = os.environ["HF_TOKEN"]
 
 # MLRun setup =================================================
-import mlrun
+
 
 """
 Set the environment for execution:
-Running inside the cluster - MLRun already knows the right address from environment variable 
+Running inside the cluster - MLRun already knows the right address from environment variable
 https://docs.mlrun.org/en/1.11.x/setup-guide.html
 
 Running locally, use the mlrun-api service NodePort
@@ -39,12 +41,13 @@ else:
     mlrun.set_environment(api_path="http://localhost:30070")
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
-    
+
 # import other utils files
 import src.utils as utils
 import src.utils_model_registry as model_reg
 
 # =======================================================
+
 
 def deploy_new_adapter(
     context,
