@@ -1,8 +1,11 @@
 ## SETUP ==============================
-# Run this file from main directory
-set -a
-source .env
-set +a
+# Run this file from main directory to set up project. Load environment variables first either through GHA or a .env file (local)
+
+# Uncomment this for local development
+# set -a
+# source .env
+# set +a
+
 echo "IMAGE_TAG: ${IMAGE_TAG}"
 echo "ENV: ${ENV}"
 

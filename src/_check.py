@@ -20,8 +20,8 @@ def checkfoo(
             name="legalcontractextractor", context="/home/mlrun_code/"
         )
     else:
-        raise SystemError("MLRUN_DBPATH environment variable is missing")
-    print("Test 1 passed")
+        raise SystemError("❌ MLRUN_DBPATH environment variable is missing")
+    print("✅ Test 1 passed project loaded")
 
     # Test 2
     import torch
@@ -29,21 +29,21 @@ def checkfoo(
     from transformers import AutoTokenizer
     import pyarrow.dataset as ds
 
-    print("Test 2 passed")
+    print("✅ Test 2 passed dependencies working")
 
     # Test 3
     import boto3
 
     sts_client = boto3.client("sts")
     identity = sts_client.get_caller_identity()
-    print("Test 3 passed ✅ AWS Authentication successful!")
+    print("✅ Test 3 passed AWS Authentication successful!")
 
     # Test 4
     import src.utils_model_registry
     import src.utils
     import src.utils_evaluate_model
 
-    print("Test 4 passed")
+    print("✅ Test 4 passed. Other source code files present")
 
     # Test 5
     project.log_model(
@@ -59,7 +59,9 @@ def checkfoo(
         key=key,
         tag=tag,
     )
+    model_d = model.to_dict()
 
-    assert model != None
+    assert model is not None
+    assert model_d, "❌ The dictionary is empty!"
 
-    print("Test 5 passed")
+    print("✅ Test 5 passed. Model object created and re-loaded")

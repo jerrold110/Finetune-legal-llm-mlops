@@ -1,14 +1,18 @@
 """
+A LARGE PART OF THIS BUILD FUNCTION HAS BEEN COMMENTED OUT BECAUSE EACH FUNCTION BUILD TAKES 5-10 MINUTES CAUSING THE BUILD TO TAKE UP TO 45 MINUTES
+
 Builds MLRun function images
 This file is run after the MLRun project has been created, and the function code has been committed to github.
 Run this file from main directory
+
+THis file is only meant to run in CI/CD environment. Variables should be loaded before hand in a the job or in an .env file (local test)
 """
 
 import mlrun
 import os
 import sys
 
-#BRANCH = os.environ["BRANCH"]
+# BRANCH = os.environ["BRANCH"]
 ENV = os.environ["ENV"]
 ACCOUNT_ID = os.environ["ACCOUNT_ID"]
 MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
@@ -53,7 +57,9 @@ raw_proc_fn = project.set_function(
 )
 
 raw_proc_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
-raw_proc_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
+raw_proc_fn.set_env_from_secret(
+    "AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID"
+)
 raw_proc_fn.set_env_from_secret(
     "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
 )
@@ -90,7 +96,9 @@ eval_nt_fn = project.set_function(
 )
 
 eval_nt_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
-eval_nt_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
+eval_nt_fn.set_env_from_secret(
+    "AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID"
+)
 eval_nt_fn.set_env_from_secret(
     "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
 )
@@ -114,155 +122,195 @@ project.build_function(
     secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
 )
 
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# Test function for CI/cD
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-# =======================================================
-# Train (ENTRE REPO)
-# =======================================================
-eval_t_fn = project.set_function(
-    name="build-eval-train",
-    func="src/evaluate_train.py",
-    handler="evaluate_model_train",
+_check_fn = project.set_function(
+    name="build-check",
+    func="src/_check.py",
+    handler="checkfoo",
     image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
     kind="job",
     # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
     with_repo=True,
 )
 
-eval_t_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
-eval_t_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
-eval_t_fn.set_env_from_secret(
+_check_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
+_check_fn.set_env_from_secret(
+    "AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID"
+)
+_check_fn.set_env_from_secret(
     "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
 )
-eval_t_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
-eval_t_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
-eval_t_fn.set_env(name="ENV", value=ENV)
-eval_t_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
-eval_t_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
+_check_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
+_check_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
+_check_fn.set_env(name="ENV", value=ENV)
+_check_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
+_check_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
 
-eval_t_name = "eval-train"
-eval_t_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{eval_t_name}:{IMAGE_TAG}"
+_check_name = "check"
+_check_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{_check_name}:{IMAGE_TAG}"
 
 print("Pulling Repo from GitHub and building...")
 
 project.build_function(
     base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
-    function=eval_t_fn,
-    image=eval_t_image_name,
+    function=_check_fn,
+    image=_check_image_name,
     with_mlrun=False,  # This is very important, or else it changes the base image
     force_build=True,
     secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
 )
 
-# =======================================================
-# Register model
-# =======================================================
-reg_mod_fn = project.set_function(
-    name="build-register-model",
-    func="src/register_model.py",
-    handler="register_new_model",
-    image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
-    kind="job",
-    # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
-    with_repo=True,
-)
+# # =======================================================
+# # Train (ENTRE REPO)
+# # =======================================================
+# eval_t_fn = project.set_function(
+#     name="build-eval-train",
+#     func="src/evaluate_train.py",
+#     handler="evaluate_model_train",
+#     image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     kind="job",
+#     # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
+#     with_repo=True,
+# )
 
-reg_mod_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
-reg_mod_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
-reg_mod_fn.set_env_from_secret(
-    "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
-)
-reg_mod_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
-reg_mod_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
-reg_mod_fn.set_env(name="ENV", value=ENV)
-reg_mod_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
-reg_mod_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
+# eval_t_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
+# eval_t_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
+# eval_t_fn.set_env_from_secret(
+#     "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
+# )
+# eval_t_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
+# eval_t_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
+# eval_t_fn.set_env(name="ENV", value=ENV)
+# eval_t_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
+# eval_t_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
 
-reg_mod_name = "register-model"
-reg_mod_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{reg_mod_name}:{IMAGE_TAG}"
+# eval_t_name = "eval-train"
+# eval_t_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{eval_t_name}:{IMAGE_TAG}"
 
-print("Pulling Repo from GitHub and building...")
+# print("Pulling Repo from GitHub and building...")
 
-project.build_function(
-    base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
-    function=reg_mod_fn,
-    image=reg_mod_image_name,
-    with_mlrun=False,  # This is very important, or else it changes the base image
-    force_build=True,
-    secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
-)
+# project.build_function(
+#     base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     function=eval_t_fn,
+#     image=eval_t_image_name,
+#     with_mlrun=False,  # This is very important, or else it changes the base image
+#     force_build=True,
+#     secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
+# )
 
-# =======================================================
-# Deploy model + adapter
-# =======================================================
-dep_mod_adapt_fn = project.set_function(
-    name="build-deploy-model-adapter",
-    func="src/deploy_model.py",
-    handler="deploy_new_model_adapter",
-    image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
-    kind="job",
-    # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
-    with_repo=True,
-)
+# # =======================================================
+# # Register model
+# # =======================================================
+# reg_mod_fn = project.set_function(
+#     name="build-register-model",
+#     func="src/register_model.py",
+#     handler="register_new_model",
+#     image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     kind="job",
+#     # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
+#     with_repo=True,
+# )
 
-dep_mod_adapt_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
-dep_mod_adapt_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
-dep_mod_adapt_fn.set_env_from_secret(
-    "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
-)
-dep_mod_adapt_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
-dep_mod_adapt_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
-dep_mod_adapt_fn.set_env(name="ENV", value=ENV)
-dep_mod_adapt_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
-dep_mod_adapt_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
+# reg_mod_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
+# reg_mod_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
+# reg_mod_fn.set_env_from_secret(
+#     "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
+# )
+# reg_mod_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
+# reg_mod_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
+# reg_mod_fn.set_env(name="ENV", value=ENV)
+# reg_mod_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
+# reg_mod_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
 
-dep_mod_adapt_name = "deploy-model-adapter"
-dep_mod_adapt_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{dep_mod_adapt_name}:{IMAGE_TAG}"
+# reg_mod_name = "register-model"
+# reg_mod_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{reg_mod_name}:{IMAGE_TAG}"
 
-print("Pulling Repo from GitHub and building...")
+# print("Pulling Repo from GitHub and building...")
 
-project.build_function(
-    base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
-    function=dep_mod_adapt_fn,
-    image=dep_mod_adapt_image_name,
-    with_mlrun=False,  # This is very important, or else it changes the base image
-    force_build=True,
-    secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
-)
+# project.build_function(
+#     base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     function=reg_mod_fn,
+#     image=reg_mod_image_name,
+#     with_mlrun=False,  # This is very important, or else it changes the base image
+#     force_build=True,
+#     secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
+# )
 
-# =======================================================
-# Deploy adapter
-# =======================================================
-dep_adapt_fn = project.set_function(
-    name="build-deploy-adapter-existing-model",
-    func="src/deploy_adapter.py",
-    handler="deploy_new_adapter",
-    image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
-    kind="job",
-    # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
-    with_repo=True,
-)
+# # =======================================================
+# # Deploy model + adapter
+# # =======================================================
+# dep_mod_adapt_fn = project.set_function(
+#     name="build-deploy-model-adapter",
+#     func="src/deploy_model.py",
+#     handler="deploy_new_model_adapter",
+#     image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     kind="job",
+#     # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
+#     with_repo=True,
+# )
 
-dep_adapt_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
-dep_adapt_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
-dep_adapt_fn.set_env_from_secret(
-    "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
-)
-dep_adapt_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
-dep_adapt_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
-dep_adapt_fn.set_env(name="ENV", value=ENV)
-dep_adapt_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
-dep_adapt_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
+# dep_mod_adapt_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
+# dep_mod_adapt_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
+# dep_mod_adapt_fn.set_env_from_secret(
+#     "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
+# )
+# dep_mod_adapt_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
+# dep_mod_adapt_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
+# dep_mod_adapt_fn.set_env(name="ENV", value=ENV)
+# dep_mod_adapt_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
+# dep_mod_adapt_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
 
-dep_adapt_name = "deploy-adapter"
-dep_adapt_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{dep_adapt_name}:{IMAGE_TAG}"
+# dep_mod_adapt_name = "deploy-model-adapter"
+# dep_mod_adapt_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{dep_mod_adapt_name}:{IMAGE_TAG}"
 
-print("Pulling Repo from GitHub and building...")
+# print("Pulling Repo from GitHub and building...")
 
-project.build_function(
-    base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
-    function=dep_adapt_fn,
-    image=dep_adapt_image_name,
-    with_mlrun=False,  # This is very important, or else it changes the base image
-    force_build=True,
-    secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
-)
+# project.build_function(
+#     base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     function=dep_mod_adapt_fn,
+#     image=dep_mod_adapt_image_name,
+#     with_mlrun=False,  # This is very important, or else it changes the base image
+#     force_build=True,
+#     secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
+# )
+
+# # =======================================================
+# # Deploy adapter
+# # =======================================================
+# dep_adapt_fn = project.set_function(
+#     name="build-deploy-adapter-existing-model",
+#     func="src/deploy_adapter.py",
+#     handler="deploy_new_adapter",
+#     image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     kind="job",
+#     # THIS CLONES THE ENTIRE REPO, FOR MULTI SOURCE FILES
+#     with_repo=True,
+# )
+
+# dep_adapt_fn.set_image_pull_configuration(image_pull_secret_name="ecr-pull-secret")
+# dep_adapt_fn.set_env_from_secret("AWS_ACCESS_KEY_ID", "aws-creds-literal", "AWS_ACCESS_KEY_ID")
+# dep_adapt_fn.set_env_from_secret(
+#     "AWS_SECRET_ACCESS_KEY", "aws-creds-literal", "AWS_SECRET_ACCESS_KEY"
+# )
+# dep_adapt_fn.set_env(name="MLRUN_AWS_ROLE_ARN", value=MLRUN_AWS_ROLE_ARN)
+# dep_adapt_fn.set_env(name="HF_TOKEN", value=HF_TOKEN)
+# dep_adapt_fn.set_env(name="ENV", value=ENV)
+# dep_adapt_fn.set_env(name="ACCOUNT_ID", value=ACCOUNT_ID)
+# dep_adapt_fn.set_env(name="AWS_ENDPOINT_URL_S3", value="https://s3.amazonaws.com")
+
+# dep_adapt_name = "deploy-adapter"
+# dep_adapt_image_name = f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/function-{dep_adapt_name}:{IMAGE_TAG}"
+
+# print("Pulling Repo from GitHub and building...")
+
+# project.build_function(
+#     base_image=f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/{ENV}/mlrun-myjob:{IMAGE_TAG}",
+#     function=dep_adapt_fn,
+#     image=dep_adapt_image_name,
+#     with_mlrun=False,  # This is very important, or else it changes the base image
+#     force_build=True,
+#     secret_name="ecr-pull-secret",  # This argument may be not working in 1.11.0 ???
+# )

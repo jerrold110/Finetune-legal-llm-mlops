@@ -268,8 +268,7 @@ terraform.rc
 /mlrun-data/mlrun.db
 /images/lambda_gateway/opt/
 
-# testing
-test_*
+# ad-hoc testing
 past_notebooks
 compose_backup/*
 
@@ -279,3 +278,4 @@ build_functions.ipynb
 test1.*
 test.*
 instances for models.txt
+build_functions_.*ipynb
