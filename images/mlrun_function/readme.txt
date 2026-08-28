@@ -1,1 +1,2 @@
-this is the same requirements.txt file as in the main working directory of this code repo, built with uv
+Installed cpu version of pytorch
+Removed pywin32

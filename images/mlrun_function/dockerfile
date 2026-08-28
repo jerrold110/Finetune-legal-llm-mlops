@@ -1,3 +1,5 @@
+# Python version is 3.11.15
+# https://hub.docker.com/layers/mlrun/mlrun/1.11.0/images/sha256-f7c8a5fc581df5962c6785f2199ab093267ef9c8497c88a077d2c25e9a839410
 FROM mlrun/mlrun:1.11.0
 
 RUN python -m pip install --upgrade pip && \
