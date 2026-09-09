@@ -56,6 +56,11 @@ The CI/CD process that builds, tests, commits to version control, and deploys th
 ![MLRun overview](diagram/cicd1.png)
 ![MLRun overview](diagram/cicd2.png)
 
+### Mono-repo vs Multi-repo
+In this MLOps platform project, there are multiple pipelines where similarities could be drawn between it and a platform with multiple microservices. I am using a mono-repo approach in this project, which is not a good approach in general because every single change no matter how small requires building, testing, merging, and deploying all the pipelines in this platform.
+
+As this is a portfolio project with only me working on it, I am using a mono-repo approach and bundling all the MLOps pipelines in this platform into a single repository.
+
 ## Recommended project lifecycle
 This is the recommended project lifecycle that incorporates CI/CD with Git from the official  MLRun documentation:
 - https://docs.mlrun.org/en/stable/projects/git-best-practices.html
