@@ -22,8 +22,6 @@ docker login \
 
 # docker build \
 #   -t my-busybox-docker:latest \
-#   --build-arg AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-#   --build-arg AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
 #   --build-arg HF_TOKEN="$HF_TOKEN" \
 #   ./images/test_image
 
@@ -32,10 +30,12 @@ docker login \
 # --region us-east-1
 
 # docker tag my-busybox-docker:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
+# docker tag my-busybox-docker:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:test_abcd"
 
 # docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
+# docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:test_abcd"
 
-# MLRun Image ==============================
+# # MLRun Image ==============================
 Repo_name_mlrun="${ENV}/mlrun-myjob"
 
 docker build \
@@ -49,8 +49,10 @@ aws ecr create-repository \
   --region us-east-1
 
 docker tag mlrun-myjob:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:${IMAGE_TAG}"
+docker tag mlrun-myjob:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:latest"
 
 docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:${IMAGE_TAG}"
+docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:latest"
 
 # Lambda traffic handler ==============================
 echo "Building and pushing Lambda traffic handler..."
@@ -69,8 +71,10 @@ aws ecr create-repository \
   --region us-east-1
 
 docker tag traffic-gateway:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:${IMAGE_TAG}"
+docker tag traffic-gateway:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:latest"
 
 docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:${IMAGE_TAG}"
+docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:latest"
 
 ## SAGEMAKER TRAINING IMAGE (DON'T RUN THIS, IT TAKES 1 HOUR)  ==============================
 # aws ecr get-login-password \

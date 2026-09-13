@@ -50,11 +50,13 @@ The deployment process of MLRun job functions (k8s batch jobs) are unique in tha
 - https://docs.mlrun.org/en/stable/concepts/functions-overview.html
 
 ![MLRun overview](diagram/cicd3.png)
+![MLRun overview](diagram/cicd4.png)
 
 The CI/CD process that builds, tests, commits to version control, and deploys this platform that follows the recommended MLRun approach for production is like so:
 
 ![MLRun overview](diagram/cicd1.png)
 ![MLRun overview](diagram/cicd2.png)
+
 
 ### Mono-repo vs Multi-repo
 In this MLOps platform project, there are multiple pipelines where similarities could be drawn between it and a platform with multiple microservices. I am using a mono-repo approach in this project, which is not a good approach in general because every single change no matter how small requires building, testing, merging, and deploying all the pipelines in this platform.

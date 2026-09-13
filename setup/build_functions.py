@@ -1,11 +1,10 @@
 """
-A LARGE PART OF THIS BUILD FUNCTION HAS BEEN COMMENTED OUT BECAUSE EACH FUNCTION BUILD TAKES 5-10 MINUTES CAUSING THE BUILD TO TAKE UP TO 45 MINUTES
+A LARGE PART OF THIS BUILD SCRIPT HAS BEEN COMMENTED OUT BECAUSE EACH FUNCTION BUILD TAKES 5-10 MINUTES CAUSING THE BUILD TO TAKE UP TO 45 MINUTES
 
-Builds MLRun function images
-This file is run after the MLRun project has been created, and the function code has been committed to github.
-Run this file from main directory
-
-THis file is only meant to run in CI/CD environment. Variables should be loaded before hand in a the job or in an .env file (local test)
+-Builds MLRun function images
+-This file is run after the MLRun project has been created, and the function code has been committed to github.
+-Run this file from main directory
+-This file is only meant to run in CI/CD environment. Variables should be loaded before hand in a the job or in an .env file (local test)
 """
 
 import mlrun
@@ -19,6 +18,7 @@ MLRUN_AWS_ROLE_ARN = os.environ["MLRUN_AWS_ROLE_ARN"]
 HF_TOKEN = os.environ["HF_TOKEN"]
 # in CI/CD this will be a unique variable from the github actions run. local dev uses "latest"
 IMAGE_TAG = os.environ["IMAGE_TAG"]
+FEATURE_BRANCH = os.environ["FEATURE_BRANCH"]
 
 if os.environ.get("MLRUN_DBPATH"):
     print("Detected K8s environment")
@@ -36,7 +36,8 @@ else:
     project = mlrun.load_project(name="legalcontractextractor", context="../")
 
 # Configuration for the build
-url = "git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/main"
+# Source branch for build
+url = f"git://github.com/jerrold110/Finetune-legal-llm-mlops.git#refs/heads/{FEATURE_BRANCH}"
 project.set_source(
     source=url,
     pull_at_runtime=False,
