@@ -42,7 +42,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        uv pip sync requirements_ci.txt
+        uv pip sync --system requirements_ci.txt
     - name: Lint Python with flake8
       run: |
         # stop the build if there are errors
