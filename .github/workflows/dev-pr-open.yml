@@ -62,6 +62,11 @@ jobs:
         cd Terraform
         terraform validate
         terraform fmt
+    - name: Download lambda appconfig layer
+      run: |
+        cd ./images/lambda_gateway
+        chmod +x download_appconfig_layer.sh
+        ./download_appconfig_layer.sh
     - name: Build docker images
       run: |
         chmod +x ./images/build_ecr.sh

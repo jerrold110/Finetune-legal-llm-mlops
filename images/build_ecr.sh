@@ -9,7 +9,7 @@
 echo "IMAGE_TAG: ${IMAGE_TAG}"
 echo "ENV: ${ENV}"
 
-image_tag_short=${IMAGE_TAG::7}
+image_tag_short=${IMAGE_TAG:0:7} #image_tag_short=${IMAGE_TAG::7}
 
 # Assume aws console has been authenticated
 aws ecr get-login-password \
