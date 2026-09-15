@@ -21,15 +21,11 @@ jobs:
       # Variables
       AWS_REGION: "us-east-1"
       ENV: "dev-ci"
-      long_image_tag: ${{ github.sha }}
+      IMAGE_TAG: ${{ github.sha }}
 
-      # Secrets
-      ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
-      TF_VAR_ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      MLRUN_AWS_ROLE_ARN: ${{ secrets.MLRUN_AWS_ROLE_ARN }}
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      # Secrets (used more than once)
+      ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      TF_VAR_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
     steps:
     - uses: actions/checkout@v5
@@ -47,14 +43,28 @@ jobs:
       run: |
         # stop the build if there are errors
         flake8 src/ setup/ images/
+    - name: Setup AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
     - name: Setup Terraform CLI 1.16.2
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: "1.16.2"
-    # - name: Setup TF project, validate and format
-    #   run: |
-    #     terraform -chdir=Terraform/ init \
-    #       -backend-config="backend/dev-ci.hcl"
+    - name: Setup TF project with S3 backend
+      run: |
+        terraform -chdir=Terraform/ init \
+          -backend-config="backend/dev-ci.hcl"
+    - name: Validate and format terraform 
+      run: |
+        terraform validate
+        terraform plan
+    - name: Build docker images
+      run: |
+        chmod +x ./images/build_ecr.sh
+        ./images/build_ecr.sh
 
       
 
