@@ -59,6 +59,7 @@ jobs:
           -backend-config="backend/dev-ci.hcl"
     - name: Validate and format terraform 
       run: |
+        cd Terraform
         terraform validate
         terraform plan
     - name: Build docker images
