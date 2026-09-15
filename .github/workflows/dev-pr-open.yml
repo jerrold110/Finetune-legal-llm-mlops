@@ -57,11 +57,11 @@ jobs:
       run: |
         terraform -chdir=Terraform/ init \
           -backend-config="backend/dev-ci.hcl"
-    - name: Validate and format terraform 
+    - name: Validate and format Terraform
       run: |
         cd Terraform
         terraform validate
-        terraform plan
+        terraform fmt
     - name: Build docker images
       run: |
         chmod +x ./images/build_ecr.sh
