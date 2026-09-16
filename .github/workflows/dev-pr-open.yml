@@ -95,8 +95,8 @@ jobs:
         terraform -chdir=Terraform/ apply \
         -var-file="dev-ci.tfvars" \
         --auto-approve
-    - name: Setup MLRun project
-      run: python ./setup/setup_project.py
+    # - name: Setup MLRun project
+    #   run: python ./setup/setup_project.py
     - name: Build MLRun functions
       env: 
         FEATURE_BRANCH: ${{ github.head_ref }}
