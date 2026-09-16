@@ -90,6 +90,21 @@ jobs:
         chmod +x ./k8s/install.sh
         ./k8s/install.sh
         rm ./k8s/credentials
+    - name: Debug K8s if Helm fails
+      if: failure()
+      run: |
+        echo "=== POD STATUS ==="
+        kubectl get pods -n mlrun
+        
+        echo "=== PENDING POD EVENTS ==="
+        # Find pods that are not running and describe them to see the exact error
+        for pod in $(kubectl get pods -n mlrun --field-selector=status.phase=Pending -o jsonpath='{.items[*].metadata.name}'); do
+          echo "Describing $pod..."
+          kubectl describe pod $pod -n mlrun
+        done
+        
+        echo "=== PVC STATUS ==="
+        kubectl get pvc -n mlrun
     - name: Terraform apply
       run: |
         terraform -chdir=Terraform/ apply \
