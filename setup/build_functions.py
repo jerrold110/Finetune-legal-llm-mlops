@@ -34,6 +34,7 @@ else:
     mlrun.set_environment(api_path="http://localhost:30070")
     # Context must be where project.yaml is, if running from notebook use ../
     project = mlrun.load_project(name="legalcontractextractor", context="../")
+    print("Successfully loaded project")
 
 # Configuration for the build
 # Source branch for build
@@ -42,6 +43,7 @@ project.set_source(
     source=url,
     pull_at_runtime=False,
 )
+print("Set project source")
 # for projects that require cloning the entire repo (clones project.yaml too)
 # project.set_secrets(secrets={"GIT_TOKEN" : "XXXXXXXXXXXXXXX"}, provider="kubernetes") private repo
 
