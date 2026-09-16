@@ -86,6 +86,7 @@ jobs:
         EOF
     - name: Install MLRun via Helm
       run: |
+        chmod +x ./k8s/install.sh
         ./k8s/install.sh
         rm ./k8s/credentials
     - name: Terraform apply
