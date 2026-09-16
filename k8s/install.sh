@@ -1,9 +1,13 @@
 # Run this from main directory. AWS has to be authenticated
 # Automatically exports all subsequently defined or modified variables to the environment
-set -a 
-source .env
-set +a
+# set -a 
+# source .env
+# set +a
 
+# Create namespace
+kubectl create namespace mlrun
+
+# Variables
 ECR_SERVER="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
 echo $ECR_SERVER
 
@@ -13,10 +17,8 @@ cat .images/credentials
 kubectl --namespace mlrun delete secret ecr-build-secret
 kubectl --namespace mlrun create secret generic ecr-build-secret \
   --from-file=./k8s/credentials
- # Literal does not work
+ # Literal secret does not work
 #  --from-literal=aws_access_key_id=AKIA... \
-#  --from-literal=aws_secret_access_key=... \
-#  --from-literal=region=us-east-1
 
 echo "===> Installing mlrun with helm..."
 # Lite version
@@ -24,7 +26,7 @@ helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
     --wait \
-    --timeout 5400s \
+    --timeout 3600s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=localhost \
