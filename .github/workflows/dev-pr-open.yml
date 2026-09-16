@@ -1,19 +1,22 @@
 name: CI Pipeline
 
 on:
-  push:
+  # Branch protection rules prevent push to protected branches
+  # push:
+  pull_request:
     branches:
       - dev
+    types:
+      - opened
+      - synchronize
+      - reopened
     paths-ignore:
       - 'README.md'
       - 'diagram/**'
       - 'docs/**'
-  pull_request:
-    branches:
-      - dev
 
 jobs:
-  ci-test:
+  ci-build-test:
     runs-on: ubuntu-latest
 
     # Environment variables for this job
@@ -21,7 +24,7 @@ jobs:
       # Variables
       AWS_REGION: "us-east-1"
       ENV: "dev-ci"
-      IMAGE_TAG: ${{ github.sha }}
+      IMAGE_TAG: pr-${{ github.event.pull_request.number }} #${{ github.sha }}
 
       # Secrets (used more than once)
       ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}

@@ -9,8 +9,6 @@
 echo "IMAGE_TAG: ${IMAGE_TAG}"
 echo "ENV: ${ENV}"
 
-image_tag_short=${IMAGE_TAG:0:7} #image_tag_short=${IMAGE_TAG::7}
-
 # Assume aws console has been authenticated
 aws ecr get-login-password \
     --region us-east-1 | \
@@ -50,10 +48,10 @@ aws ecr create-repository \
   --repository-name "$Repo_name_mlrun" \
   --region us-east-1
 
-docker tag mlrun-myjob:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:${image_tag_short}"
+docker tag mlrun-myjob:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:${IMAGE_TAG}"
 docker tag mlrun-myjob:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:latest"
 
-docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:${image_tag_short}"
+docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:${IMAGE_TAG}"
 docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_mlrun}:latest"
 
 # Lambda traffic handler ==============================
@@ -72,10 +70,10 @@ aws ecr create-repository \
   --repository-name "$Repo_name_lambda" \
   --region us-east-1
 
-docker tag traffic-gateway:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:${image_tag_short}"
+docker tag traffic-gateway:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:${IMAGE_TAG}"
 docker tag traffic-gateway:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:latest"
 
-docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:${image_tag_short}"
+docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:${IMAGE_TAG}"
 docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name_lambda}:latest"
 
 ## SAGEMAKER TRAINING IMAGE (DON'T RUN THIS, IT TAKES 1 HOUR)  ==============================
