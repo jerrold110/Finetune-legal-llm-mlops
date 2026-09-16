@@ -30,7 +30,6 @@ helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
     --wait \
-    #--timeout 3600s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=localhost \
