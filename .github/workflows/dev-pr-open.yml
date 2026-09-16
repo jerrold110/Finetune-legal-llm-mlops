@@ -97,15 +97,15 @@ jobs:
         --auto-approve
     # - name: Setup MLRun project
     #   run: python ./setup/setup_project.py
-    # - name: Expose MLRun API to Github Runner
-    #   run: |
-    #     # Run port-forward in the background (&) so it doesn't block the next CI steps
-    #     kubectl port-forward -n mlrun svc/mlrun-api 30070:8080 > /dev/null 2>&1 &
+    - name: Expose MLRun API to Github Runner
+      run: |
+        # Run port-forward in the background (&) so it doesn't block the next CI steps
+        kubectl port-forward -n mlrun svc/mlrun-api 30070:8080 > /dev/null 2>&1 &
         
-    #     # Wait a few seconds for the connection to establish
-    #     sleep 5
-    # - name: List MLRun Services
-    #   run: kubectl get svc -n mlrun
+        # Wait a few seconds for the connection to establish
+        sleep 5
+    - name: List MLRun Services
+      run: kubectl get svc -n mlrun
     - name: Build MLRun functions
       env: 
         FEATURE_BRANCH: ${{ github.head_ref }}
@@ -116,7 +116,8 @@ jobs:
       run: |
         pytest --capture=no
         echo "---> Unit tests passed"
-    - name: Destroy terraform   
+    - name: Destroy terraform
+      if: always()
       run: |
         terraform -chdir=Terraform/ destroy \
         -var-file="dev-ci.tfvars" \
