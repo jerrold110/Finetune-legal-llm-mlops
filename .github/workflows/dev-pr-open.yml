@@ -90,28 +90,29 @@ jobs:
         chmod +x ./k8s/install.sh
         ./k8s/install.sh
         rm ./k8s/credentials
-    - name: Debug K8s if Helm fails
-      if: failure()
+    - name: Debug Stuck Pods and Services
+      if: always()
       run: |
-        echo "=== POD STATUS ==="
+        echo "=== ALL PODS ==="
         kubectl get pods -n mlrun
         
-        echo "=== PENDING POD EVENTS ==="
-        # Find pods that are not running and describe them to see the exact error
-        for pod in $(kubectl get pods -n mlrun --field-selector=status.phase=Pending -o jsonpath='{.items[*].metadata.name}'); do
-          echo "Describing $pod..."
-          kubectl describe pod $pod -n mlrun
-        done
+        echo "=== ALL SERVICES ==="
+        kubectl get svc -n mlrun
         
-        echo "=== PVC STATUS ==="
+        echo "=== PERSISTENT VOLUMES ==="
         kubectl get pvc -n mlrun
+        
+        echo "=== CLUSTER EVENTS ==="
+        # This will show exact errors like "Insufficient CPU" or "Failed to pull image"
+        kubectl get events -n mlrun --sort-by='.metadata.creationTimestamp'
+        
     - name: Terraform apply
       run: |
         terraform -chdir=Terraform/ apply \
         -var-file="dev-ci.tfvars" \
         --auto-approve
-    # - name: Setup MLRun project
-    #   run: python ./setup/setup_project.py
+      # - name: Setup MLRun project
+      #   run: python ./setup/setup_project.py
     - name: Expose MLRun API to Github Runner
       run: |
         # Run port-forward in the background (&) so it doesn't block the next CI steps
