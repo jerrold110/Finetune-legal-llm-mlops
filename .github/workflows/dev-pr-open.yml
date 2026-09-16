@@ -46,34 +46,34 @@ jobs:
       run: |
         # stop the build if there are errors
         flake8 src/ setup/ images/
-    # - name: Setup AWS Credentials
-    #   uses: aws-actions/configure-aws-credentials@v4
-    #   with:
-    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #     aws-region: ${{ env.AWS_REGION }}
-    # - name: Setup Terraform CLI 1.16.2
-    #   uses: hashicorp/setup-terraform@v3
-    #   with:
-    #     terraform_version: "1.16.2"
-    # - name: Setup TF project with S3 backend
-    #   run: |
-    #     terraform -chdir=Terraform/ init \
-    #       -backend-config="backend/dev-ci.hcl"
-    # - name: Validate and format Terraform
-    #   run: |
-    #     cd Terraform
-    #     terraform validate
-    #     terraform fmt
-    # - name: Download lambda appconfig layer
-    #   run: |
-    #     cd ./images/lambda_gateway
-    #     chmod +x download_appconfig_layer.sh
-    #     ./download_appconfig_layer.sh
-    # - name: Build docker images
-    #   run: |
-    #     chmod +x ./images/build_ecr.sh
-    #     ./images/build_ecr.sh
+    - name: Setup AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    - name: Setup Terraform CLI 1.16.2
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "1.16.2"
+    - name: Setup TF project with S3 backend
+      run: |
+        terraform -chdir=Terraform/ init \
+          -backend-config="backend/dev-ci.hcl"
+    - name: Validate and format Terraform
+      run: |
+        cd Terraform
+        terraform validate
+        terraform fmt
+    - name: Download lambda appconfig layer
+      run: |
+        cd ./images/lambda_gateway
+        chmod +x download_appconfig_layer.sh
+        ./download_appconfig_layer.sh
+    - name: Build docker images
+      run: |
+        chmod +x ./images/build_ecr.sh
+        ./images/build_ecr.sh
     - name: Create k8s Kind Cluster
       uses: helm/kind-action@v1.10.0
     - name: Setup Kubernetes ECR Secret file
@@ -88,6 +88,28 @@ jobs:
       run: |
         ./k8s/install.sh
         rm ./k8s/credentials
-
+    - name: Terraform apply
+      run: |
+        terraform -chdir=Terraform/ apply \
+        -var-file="dev-ci.tfvars" \
+        --auto-approve
+    - name: Setup MLRun project
+      run: python ./setup/setup_project.py
+    - name: Build MLRun functions
+      env: 
+        FEATURE_BRANCH: ${{ github.head_ref }}
+        MLRUN_AWS_ROLE_ARN: ${{ secrets.MLRUN_AWS_ROLE_ARN }}
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      run: python ./setup/build_functions.py
+    - name: Run tests
+      run: |
+        pytest --capture=no
+        echo "---> Unit tests passed"
+    - name: Destroy terraform   
+      run: |
+        terraform -chdir=Terraform/ destroy \
+        -var-file="dev-ci.tfvars" \
+        --auto-approve
       
+    
 
