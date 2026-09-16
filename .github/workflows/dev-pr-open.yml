@@ -25,6 +25,7 @@ jobs:
       AWS_REGION: "us-east-1"
       ENV: "dev-ci"
       IMAGE_TAG: pr-${{ github.event.pull_request.number }} #${{ github.sha }}
+      TF_VAR_IMAGE_TAG: pr-${{ github.event.pull_request.number }}
 
       # Secrets (used more than once)
       ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
