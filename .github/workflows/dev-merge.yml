@@ -1,0 +1,51 @@
+name: CD Pipeline - Deployment
+
+on:
+  pull_request:
+    branches:
+      - AAA
+    types:
+      - closed
+    paths-ignore:
+      - 'README.md'
+      - 'diagram/**'
+      - 'docs/**'
+
+jobs:
+  cd-deliver-and-deploy:
+    # ONLY run if the PR was merged (ignores PRs closed without merging)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    env:
+      # Variables
+      AWS_REGION: "us-east-1"
+      ENV: "dev"
+      IMAGE_TAG: pr-${{ github.event.pull_request.number }} #${{ github.sha }}
+      TF_VAR_IMAGE_TAG: pr-${{ github.event.pull_request.number }}
+
+      # Secrets (used more than once)
+      ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      TF_VAR_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+    steps:
+      - name: Setup Terraform CLI 1.16.2
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.2"
+      - name: Setup TF project with S3 backend (dev)
+        run: |
+          terraform -chdir=Terraform/ init \
+            -backend-config="backend/dev.hcl"
+          # - name: Terraform apply
+      - name: Terraform apply
+        run: |
+          terraform -chdir=Terraform/ apply \
+          -var-file="dev-ci.tfvars" \
+          --auto-approve
+      - name: Copy images from dev-ci to dev
+        run: |
+          chmod +x ./images/promote_ecr.sh
+          ./images/promote_ecr.sh
+      - name: Build functions in dev environment
+        run: |
+          echo "Hello world"
