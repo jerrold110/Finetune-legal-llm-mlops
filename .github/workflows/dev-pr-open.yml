@@ -1,8 +1,7 @@
 name: CI Pipeline
 
 on:
-  # Branch protection rules prevent push to protected branches
-  # push:
+  # Branch protection rules prevent push to protected branches (dev, main, staging)
   pull_request:
     branches:
       - dev
@@ -16,7 +15,7 @@ on:
       - 'docs/**'
 
 jobs:
-  ci-build-test:
+  ci-build-and-test:
     runs-on: ubuntu-latest
 
     # Environment variables for this job
@@ -47,12 +46,12 @@ jobs:
     #   run: |
     #     # stop the build if there are errors
     #     flake8 src/ setup/ images/
-    # - name: Setup AWS Credentials
-    #   uses: aws-actions/configure-aws-credentials@v4
-    #   with:
-    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #     aws-region: ${{ env.AWS_REGION }}
+    - name: Setup AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
     # - name: Setup Terraform CLI 1.16.2
     #   uses: hashicorp/setup-terraform@v3
     #   with:
@@ -75,8 +74,6 @@ jobs:
     #   run: |
     #     chmod +x ./images/build_ecr.sh
     #     ./images/build_ecr.sh
-    - name: Create k8s Kind Cluster
-      uses: helm/kind-action@v1.10.0
     - name: Setup Kubernetes ECR Secret file
       run: |
         cat <<EOF > ./k8s/credentials
@@ -85,6 +82,8 @@ jobs:
         aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
         region=${{ env.AWS_REGION }}
         EOF
+    - name: Create k8s Kind Cluster
+      uses: helm/kind-action@v1.10.0
     - name: Install MLRun via Helm
       run: |
         chmod +x ./k8s/install.sh
