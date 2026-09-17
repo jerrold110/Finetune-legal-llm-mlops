@@ -46,18 +46,18 @@ echo "===> Installing mlrun with helm..."
 #     --set mlrun-db.initContainers[0].volumeMounts[1].name="run" \
 #     --set mlrun-db.initContainers[0].volumeMounts[1].mountPath="/var/run/mysqld" \
 #     mlrun-ce/mlrun-ce
-helm --namespace mlrun \
-    install mlrun-ce \
-    --version 0.11.0 \
-    --wait \
-    --timeout 3600s \
-    --set global.registry.url=$ECR_SERVER \
-    --set global.registry.secretName=ecr-build-secret \
-    --set global.externalHostAddress=localhost \
-    --set pipelines.enabled=false \
-    --set kube-prometheus-stack.enabled=false \
-    --set spark-operator.enabled=false \
-    mlrun-ce/mlrun-ce
+
+# 1. Install without --wait so the command finishes immediately
+    helm --namespace mlrun \
+        install mlrun-ce \
+        --version 0.11.0 \
+        --set global.registry.url=$ECR_SERVER \
+        --set global.registry.secretName=ecr-build-secret \
+        --set global.externalHostAddress=localhost \
+        --set pipelines.enabled=false \
+        --set kube-prometheus-stack.enabled=false \
+        --set spark-operator.enabled=false \
+        mlrun-ce/mlrun-ce
 
 # 2. Wait a few seconds for the Kubernetes API to register the Deployment objects
 sleep 10
