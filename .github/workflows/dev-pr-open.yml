@@ -92,10 +92,8 @@ jobs:
     - name: Debug Stuck Pods and Services
       if: always()
       run: |
-        kubectl run mysql-debug -n mlrun --rm -it --restart=Never \
-        --image=mysql:8.4 \
-        --overrides='{"spec":{"securityContext":{"runAsUser":0}}}' \
-        --command -- bash -c "ls -ld /var/run /var/run/mysqld; id; touch /var/run/mysqld/test && echo WRITE_OK || echo WRITE_FAILED; mount | grep -i run"
+        POD=$(kubectl get pods -n mlrun --no-headers -o custom-columns=":metadata.name" | grep '^mlrun-db-')
+        kubectl get pod -n mlrun "$POD" -o yaml
         
     # - name: Terraform apply
     #   run: |
