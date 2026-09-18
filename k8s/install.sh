@@ -25,55 +25,18 @@ kubectl --namespace mlrun create secret generic ecr-build-secret \
 #  --from-literal=aws_access_key_id=AKIA... \
 
 echo "===> Installing mlrun with helm..."
-# helm --namespace mlrun \
-#     install mlrun-ce \
-#     --version 0.11.0 \
-#     --wait \
-#     --timeout 3600s \
-#     --set global.registry.url=$ECR_SERVER \
-#     --set global.registry.secretName=ecr-build-secret \
-#     --set global.externalHostAddress=localhost \
-#     --set pipelines.enabled=false \
-#     --set kube-prometheus-stack.enabled=false \
-#     --set spark-operator.enabled=false \
-#     --set mlrun-db.initContainers[0].name="fix-permissions" \
-#     --set mlrun-db.initContainers[0].image="alpine" \
-#     --set mlrun-db.initContainers[0].command[0]="sh" \
-#     --set mlrun-db.initContainers[0].command[1]="-c" \
-#     --set mlrun-db.initContainers[0].command[2]="mkdir -p /var/run/mysqld && chown -R 999:999 /var/run/mysqld /var/lib/mysql" \
-#     --set mlrun-db.initContainers[0].volumeMounts[0].name="data" \
-#     --set mlrun-db.initContainers[0].volumeMounts[0].mountPath="/var/lib/mysql" \
-#     --set mlrun-db.initContainers[0].volumeMounts[1].name="run" \
-#     --set mlrun-db.initContainers[0].volumeMounts[1].mountPath="/var/run/mysqld" \
-#     mlrun-ce/mlrun-ce
-
-# 1. Fix the registry syntax and run helm in the background (&)
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
-    --set global.registry=$ECR_SERVER \
+    --wait \
+    --timeout 600s \
+    --set global.registry.url=$ECR_SERVER \
+    --set global.registry.secretName=ecr-build-secret \
+    --set global.externalHostAddress=localhost \
     --set pipelines.enabled=false \
     --set kube-prometheus-stack.enabled=false \
     --set spark-operator.enabled=false \
-    mlrun-ce/mlrun-ce &
-    
-HELM_PID=$!
-
-# 2. Poll the cluster until Helm creates the mlrun-db deployment
-echo "Waiting for mlrun-db deployment to be created..."
-while ! kubectl get deployment mlrun-db -n mlrun > /dev/null 2>&1; do
-  sleep 2
-done
-
-# 3. Force the database to use MySQL 8.0 to bypass the 8.4 breaking changes
-kubectl set image deployment/mlrun-db mlrun-db=mysql:8.0 -n mlrun
-
-# 4. Wait for the background Helm process and its hooks to finish successfully
-wait $HELM_PID
-
-# 5. Verify the rollouts
-kubectl rollout status deployment/mlrun-db -n mlrun --timeout=600s
-kubectl rollout status deployment/mlrun-api-chief -n mlrun --timeout=600s
+    mlrun-ce/mlrun-ce
 
 # Credentials for pods to pull images
 echo "===> Recreating secret, ECR pull credentials for k8s jobs expire every 12 hours"
