@@ -29,7 +29,7 @@ helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
     --wait \
-    --timeout 600s \
+    --timeout 3600s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=localhost \
@@ -38,6 +38,7 @@ helm --namespace mlrun \
     --set spark-operator.enabled=false \
     --set mlrun.db.securityContext.runAsUser=null \
     --set mlrun.db.podSecurityContext.runAsUser=null \
+    --set mlrun.db.podSecurityContext.fsGroup=null \
     mlrun-ce/mlrun-ce
 
 # Credentials for pods to pull images
