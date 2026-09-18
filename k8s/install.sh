@@ -36,6 +36,8 @@ helm --namespace mlrun \
     --set pipelines.enabled=false \
     --set kube-prometheus-stack.enabled=false \
     --set spark-operator.enabled=false \
+    --set mlrun.db.securityContext.runAsUser=null \
+    --set mlrun.db.podSecurityContext.runAsUser=null \
     mlrun-ce/mlrun-ce
 
 # Credentials for pods to pull images

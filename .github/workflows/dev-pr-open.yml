@@ -92,32 +92,7 @@ jobs:
     - name: Debug Stuck Pods and Services
       if: always()
       run: |
-        echo "=== ALL PODS ==="
-        kubectl get pods -n mlrun
-
-        echo "=== MLRUN-DB CURRENT LOGS ==="
-        kubectl logs -n mlrun deploy/mlrun-db --all-containers=true --tail=200 || true
-
-        echo "=== MLRUN-DB PREVIOUS (CRASHED) LOGS ==="
-        kubectl logs -n mlrun deploy/mlrun-db -c mlrun-db --previous --tail=200 || true
-
-        echo "=== MLRUN-DB INIT CONTAINER LOGS ==="
-        kubectl logs -n mlrun deploy/mlrun-db -c init-mysql --tail=100 || true
-
-        echo "=== MLRUN-DB DESCRIBE ==="
-        kubectl describe pod -n mlrun -l app.kubernetes.io/name=mlrun-db || \
-          kubectl describe pod -n mlrun $(kubectl get pod -n mlrun -o name | grep mlrun-db)
-
-        echo "=== EXIT CODES ==="
-        kubectl get pods -n mlrun -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{range .status.containerStatuses[*]}  {.name} exit={.lastState.terminated.exitCode} reason={.lastState.terminated.reason}{"\n"}{end}{end}'
-
-        echo "=== MLRUN-API PREVIOUS LOGS ==="
-        kubectl logs -n mlrun deploy/mlrun-api-chief -c mlrun-api --previous --tail=200 || true
-
-        echo "=== NODE / DISK ==="
-        kubectl describe node | sed -n '/Allocated resources/,/Events/p'
-        df -h
-        docker exec chart-testing-control-plane df -h || true
+        kubectl logs -n mlrun deploy/mlrun-db --tail=50
         
     # - name: Terraform apply
     #   run: |
