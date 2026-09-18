@@ -91,7 +91,7 @@ jobs:
         rm ./k8s/credentials
     - name: Debug Stuck Pods and Services
       if: always()
-      run: | logs 
+      run: |
         kubectl run mysql-debug -n mlrun --rm -it --restart=Never \
         --image=mysql:8.4 \
         --overrides='{"spec":{"securityContext":{"runAsUser":0}}}' \
