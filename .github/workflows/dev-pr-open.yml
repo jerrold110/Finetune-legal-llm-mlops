@@ -32,16 +32,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v5
-    - name: Create k8s KinD Cluster
-      uses: helm/kind-action@v1.10.0
-      with:
-        node_image: kindest/node:v1.29.2
+    - name: Start Minikube
+      uses: medyagh/setup-minikube@latest
     - name: Create mlrun namespace
       run: kubectl create namespace mlrun
     - name: Verify Cluster
       run: |
         kubectl cluster-info
         kubectl get nodes
+        minikube ip
     - name: Set up Helm
       uses: azure/setup-helm@v4
       with:
