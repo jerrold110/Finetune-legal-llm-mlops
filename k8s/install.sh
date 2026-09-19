@@ -74,8 +74,8 @@ wait $HELM_PID
 
 # 6. Explicitly wait for the deployments to be fully ready
 echo "Installation complete, verifying readiness..."
-kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-db --timeout=1200s
-kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-api-chief --timeout=1200s
+kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-db --timeout=600s
+kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-api-chief --timeout=10s
 
 # Credentials for pods to pull images
 echo "===> Recreating secret, ECR pull credentials for k8s jobs expire every 12 hours"
