@@ -48,56 +48,75 @@ jobs:
         version: 'v4.1.4'
     - name: Verify Helm version
       run: helm version
-    - name: Diagnose Kind / Container Runtime Foundation
-      run: |
-        echo "=== Kind cluster info ==="
-        kind version
-        kubectl version -o yaml
-        docker version
-        echo ""
-        echo "=== Node image and OS ==="
-        kubectl get nodes -o wide
-        docker exec chart-testing-control-plane cat /etc/os-release
-        echo ""
-        echo "=== containerd version INSIDE the kind node ==="
-        docker exec chart-testing-control-plane containerd --version
-        docker exec chart-testing-control-plane runc --version
-        echo ""
-        echo "=== containerd config as the node actually runs it ==="
-        docker exec chart-testing-control-plane cat /etc/containerd/config.toml
-        echo ""
-        echo "=== kernel ==="
-        docker exec chart-testing-control-plane uname -r
-        uname -r
-    - name: Inspect actual OCI runtime spec for a test container
-      run: |
-        kubectl run spec-test -n mlrun --image=busybox --restart=Never --command -- sleep 300
-        kubectl wait --for=condition=Ready pod/spec-test -n mlrun --timeout=30s
-        CID=$(docker exec chart-testing-control-plane crictl ps --name spec-test -q)
-        echo "Container ID: $CID"
-        docker exec chart-testing-control-plane find /run/containerd/io.containerd.runtime.v2.task/k8s.io/$CID -name config.json -exec cat {} \; | python3 -m json.tool > spec.json
-        echo "=== Mounts touching /run ==="
-        python3 -c "
-        import json
-        spec = json.load(open('spec.json'))
-        for m in spec['mounts']:
-            if '/run' in m['destination']:
-                print(m)
-        "
-        kubectl delete pod spec-test -n mlrun
-    # - name: Setup Kubernetes ECR Secret file
+    # - name: Diagnose Kind / Container Runtime Foundation
     #   run: |
-    #     cat <<EOF > ./k8s/credentials
-    #     [default]
-    #     aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
-    #     aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #     region=${{ env.AWS_REGION }}
-    #     EOF
-    # - name: Install MLRun via Helm
+    #     echo "=== Kind cluster info ==="
+    #     kind version
+    #     kubectl version -o yaml
+    #     docker version
+    #     echo ""
+    #     echo "=== Node image and OS ==="
+    #     kubectl get nodes -o wide
+    #     docker exec chart-testing-control-plane cat /etc/os-release
+    #     echo ""
+    #     echo "=== containerd version INSIDE the kind node ==="
+    #     docker exec chart-testing-control-plane containerd --version
+    #     docker exec chart-testing-control-plane runc --version
+    #     echo ""
+    #     echo "=== containerd config as the node actually runs it ==="
+    #     docker exec chart-testing-control-plane cat /etc/containerd/config.toml
+    #     echo ""
+    #     echo "=== kernel ==="
+    #     docker exec chart-testing-control-plane uname -r
+    #     uname -r
+    # - name: Inspect actual OCI runtime spec for a test container
     #   run: |
-    #     chmod +x ./k8s/install.sh
-    #     ./k8s/install.sh
-    #     rm ./k8s/credentials
+    #     kubectl run spec-test -n mlrun --image=busybox --restart=Never --command -- sleep 300
+    #     kubectl wait --for=condition=Ready pod/spec-test -n mlrun --timeout=30s
+    #     CID=$(docker exec chart-testing-control-plane crictl ps --name spec-test -q)
+    #     echo "Container ID: $CID"
+    #     docker exec chart-testing-control-plane find /run/containerd/io.containerd.runtime.v2.task/k8s.io/$CID -name config.json -exec cat {} \; | python3 -m json.tool > spec.json
+    #     echo "=== Mounts touching /run ==="
+    #     python3 -c "
+    #     import json
+    #     spec = json.load(open('spec.json'))
+    #     for m in spec['mounts']:
+    #         if '/run' in m['destination']:
+    #             print(m)
+    #     "
+    #     kubectl delete pod spec-test -n mlrun
+    - name: Setup Kubernetes ECR Secret file
+      run: |
+        cat <<EOF > ./k8s/credentials
+        [default]
+        aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        region=${{ env.AWS_REGION }}
+        EOF
+    - name: Install MLRun via Helm
+      run: |
+        chmod +x ./k8s/install.sh
+        ./k8s/install.sh
+        rm ./k8s/credentials
+    - name: Debug mysql-fuse PVC interaction
+      if: always()
+      run: |
+        kubectl run mysql-debug3 -n mlrun --rm -it --restart=Never \
+          --image=mysql:8.4 \
+          --overrides='{
+            "spec": {
+              "securityContext": {"runAsUser": 0},
+              "containers": [{
+                "name": "mysql-debug3",
+                "image": "mysql:8.4",
+                "stdin": true,
+                "tty": true,
+                "volumeMounts": [{"name": "data", "mountPath": "/var/lib/mysql"}]
+              }],
+              "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "mlrun-db-pvc"}}]
+            }
+          }' \
+          --command -- bash -c "ls -ld /var/run/mysqld; touch /var/run/mysqld/test && echo WRITE_OK || echo WRITE_FAILED"
     # - name: Debug Stuck Pods and Services
     #   if: always()
     #   run: |
