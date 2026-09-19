@@ -138,8 +138,7 @@ jobs:
     - name: Debug Stuck Pods and Services
       if: always()
       run: |
-        echo "=== S3 INIT JOB LOGS ==="
-        kubectl logs job/mlrun-ce-s3-bucket-init -n mlrun
+        kubectl logs deployment/mlrun-db -n mlrun
 
         echo "===== MLRun db logs"
         kubectl logs deployment/mlrun-db -n mlrun --all-containers --max-log-requests=10
