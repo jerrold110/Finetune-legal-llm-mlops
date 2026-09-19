@@ -25,14 +25,23 @@ kubectl --namespace mlrun create secret generic ecr-build-secret \
 #  --from-literal=aws_access_key_id=AKIA... \
 
 echo "===> Installing mlrun with helm..."
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+# 1. Dynamically retrieve the internal IP of the KinD node
+KIND_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+echo "Detected KinD Node IP: $KIND_IP"
+
+# 2. Execute the Helm installation
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
     --wait \
-    --timeout 1000s \
+    --timeout 1200s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
-    --set global.externalHostAddress=localhost \
+    --set global.externalHostAddress=$KIND_IP \
+    --set mlrun-api.service.type=NodePort \
     --set pipelines.enabled=false \
     --set kube-prometheus-stack.enabled=false \
     --set spark-operator.enabled=false \

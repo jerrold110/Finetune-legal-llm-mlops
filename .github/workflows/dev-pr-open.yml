@@ -98,34 +98,34 @@ jobs:
         chmod +x ./k8s/install.sh
         ./k8s/install.sh
         rm ./k8s/credentials
-    - name: Debug mysql-fuse PVC interaction
-      if: always()
-      run: |
-        kubectl run mysql-debug3 -n mlrun --restart=Never \
-          --image=mysql:8.4 \
-          --overrides='{
-            "spec": {
-              "securityContext": {"runAsUser": 0},
-              "containers": [{
-                "name": "mysql-debug3",
-                "image": "mysql:8.4",
-                "command": ["bash", "-c", "ls -ld /var/run/mysqld; touch /var/run/mysqld/test && echo WRITE_OK || echo WRITE_FAILED; sleep 5"],
-                "volumeMounts": [{"name": "data", "mountPath": "/var/lib/mysql"}]
-              }],
-              "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "mlrun-db-pvc"}}]
-            }
-          }'
-
-        kubectl wait --for=condition=Ready=false pod/mysql-debug3 -n mlrun --timeout=30s 2>/dev/null || true
-        sleep 3
-        kubectl logs -n mlrun mysql-debug3
-        kubectl delete pod -n mlrun mysql-debug3 --ignore-not-found=true
-    # - name: Debug Stuck Pods and Services
+    # - name: Debug mysql-fuse PVC interaction
     #   if: always()
     #   run: |
-    #     kubectl logs -n mlrun deploy/mlrun-db --tail=50
-    # - name: List MLRun Services
-    #   run: kubectl get svc -n mlrun
+    #     kubectl run mysql-debug3 -n mlrun --restart=Never \
+    #       --image=mysql:8.4 \
+    #       --overrides='{
+    #         "spec": {
+    #           "securityContext": {"runAsUser": 0},
+    #           "containers": [{
+    #             "name": "mysql-debug3",
+    #             "image": "mysql:8.4",
+    #             "command": ["bash", "-c", "ls -ld /var/run/mysqld; touch /var/run/mysqld/test && echo WRITE_OK || echo WRITE_FAILED; sleep 5"],
+    #             "volumeMounts": [{"name": "data", "mountPath": "/var/lib/mysql"}]
+    #           }],
+    #           "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "mlrun-db-pvc"}}]
+    #         }
+    #       }'
+
+    #     kubectl wait --for=condition=Ready=false pod/mysql-debug3 -n mlrun --timeout=30s 2>/dev/null || true
+    #     sleep 3
+    #     kubectl logs -n mlrun mysql-debug3
+    #     kubectl delete pod -n mlrun mysql-debug3 --ignore-not-found=true
+    - name: Debug Stuck Pods and Services
+      if: always()
+      run: |
+        kubectl logs -n mlrun deploy/mlrun-db --tail=50
+    - name: List MLRun Services
+      run: kubectl get svc -n mlrun
     # - name: Set up Python3.11
     #   uses: actions/setup-python@v7
     #   with:
