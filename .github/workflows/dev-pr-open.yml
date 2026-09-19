@@ -34,6 +34,9 @@ jobs:
     - uses: actions/checkout@v5
     - name: Start Minikube
       uses: medyagh/setup-minikube@latest
+      with:
+        cpus: max
+        memory: max
     - name: Create mlrun namespace
       run: kubectl create namespace mlrun
     - name: Verify Cluster
@@ -129,15 +132,24 @@ jobs:
         echo "=== ALL POD STATUSES ==="
         kubectl get pods -n mlrun
 
+        echo "MLRun PVC"
+        kubectl get pvc -n mlrun
+
     - name: Debug Stuck Pods and Services
       if: always()
       run: |
-        echo "=====MLRun db logs"
-        kubectl logs deployment/mlrun-db -n mlrun --previous
-        echo "=====Describe mlrun-db pod"
+        echo "=== S3 INIT JOB LOGS ==="
+        kubectl logs job/mlrun-ce-s3-bucket-init -n mlrun
+
+        echo "===== MLRun db logs"
+        kubectl logs deployment/mlrun-db -n mlrun --all-containers --max-log-requests=10
+
+        echo "===== Describe mlrun-db pod"
         kubectl describe pod -l app=mlrun-db -n mlrun
-        echo "====="
-        kubectl logs deployment/mlrun-api-chief -n mlrun --all-containers --previous
+
+    
+    # echo "====="
+    # kubectl logs deployment/mlrun-api-chief -n mlrun --all-containers --previous
         
     # - name: Set up Python3.11
     #   uses: actions/setup-python@v7
