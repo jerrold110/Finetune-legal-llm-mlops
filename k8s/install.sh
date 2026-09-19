@@ -30,7 +30,8 @@ echo "===> Installing mlrun with helm...artifical limit"
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
-    --timeout 900s \
+    --wait \
+    --timeout 1000s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=$(minikube ip) \
@@ -39,10 +40,10 @@ helm --namespace mlrun \
     --set spark-operator.enabled=false \
     mlrun-ce/mlrun-ce
 
-# 2. Explicitly wait for the long-running Deployments
-echo "Waiting up to 20 minutes for MLRun Deployments..."
-kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-db --timeout=1200s
-kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-api-chief --timeout=1200s
+# # 2. Explicitly wait for the long-running Deployments
+# echo "Waiting up to 20 minutes for MLRun Deployments..."
+# kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-db --timeout=1200s
+# kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-api-chief --timeout=1200s
 
 # Credentials for pods to pull images
 echo "===> Recreating secret, ECR pull credentials for k8s jobs expire every 12 hours"

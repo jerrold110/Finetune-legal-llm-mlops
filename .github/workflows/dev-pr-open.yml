@@ -41,10 +41,10 @@ jobs:
         kubectl cluster-info
         kubectl get nodes
         minikube ip
-    - name: Set up Helm
-      uses: azure/setup-helm@v4
-      with:
-        version: 'v4.1.4'
+    # - name: Set up Helm
+    #   uses: azure/setup-helm@v4
+    #   with:
+    #     version: 'v4.1.4'
     - name: Verify Helm version
       run: helm version
     # - name: Diagnose Kind / Container Runtime Foundation
