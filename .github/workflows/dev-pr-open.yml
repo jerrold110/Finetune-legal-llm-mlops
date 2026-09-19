@@ -36,6 +36,8 @@ jobs:
       uses: helm/kind-action@v1.10.0
       with:
         node_image: kindest/node:v1.29.2
+    - name: Create mlrun namespace
+      run: kubectl create namespace mlrun
     - name: Verify Cluster
       run: |
         kubectl cluster-info
