@@ -132,8 +132,9 @@ jobs:
     - name: Debug Stuck Pods and Services
       if: always()
       run: |
-        kubectl logs -n mlrun deploy/mlrun-db --tail=50
+        echo "=====MLRun db logs"
         kubectl logs deployment/mlrun-db -n mlrun --previous
+        echo "=====Describe mlrun-db pod"
         kubectl describe pod -l app=mlrun-db -n mlrun
         echo "====="
         kubectl logs deployment/mlrun-api-chief -n mlrun --all-containers --previous
