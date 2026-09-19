@@ -24,7 +24,7 @@ kubectl --namespace mlrun create secret generic ecr-build-secret \
  # Literal secret does not work
 #  --from-literal=aws_access_key_id=AKIA... \
 
-echo "===> Installing mlrun with helm...limit: 1000s"
+echo "===> Installing mlrun with helm...artifical limit"
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
@@ -37,6 +37,10 @@ helm --namespace mlrun \
     --set kube-prometheus-stack.enabled=false \
     --set spark-operator.enabled=false \
     mlrun-ce/mlrun-ce
+
+echo "Waiting up to 20 minutes for MLRun Deployments..."
+kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-db --timeout=1200s
+kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-api-chief --timeout=1200s
 
 # Credentials for pods to pull images
 echo "===> Recreating secret, ECR pull credentials for k8s jobs expire every 12 hours"
