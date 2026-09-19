@@ -25,28 +25,55 @@ kubectl --namespace mlrun create secret generic ecr-build-secret \
 #  --from-literal=aws_access_key_id=AKIA... \
 
 echo "===> Installing mlrun with helm...inject writable volume and wait"
-# 1. Install without --wait so the script continues immediately
+# 1. Start Helm in the background so it does not block the terminal
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
+    --timeout 1200s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=$(minikube ip) \
     --set pipelines.enabled=false \
     --set kube-prometheus-stack.enabled=false \
     --set spark-operator.enabled=false \
-    mlrun-ce/mlrun-ce
+    mlrun-ce/mlrun-ce &
 
-# 2. Inject a writable volume into the database deployment
-echo "Patching mlrun-db to fix socket permissions..."
-kubectl set volume deployment/mlrun-db -n mlrun \
-    --add \
-    --name=mysql-socket \
-    --type=emptyDir \
-    --mount-path=/var/run/mysqld
+HELM_PID=$!
 
-# 3. Explicitly wait for the deployments to become available
-echo "Waiting for MLRun Deployments..."
+# 2. Wait up to 2 minutes for Helm to create the mlrun-db deployment
+echo "Waiting for mlrun-db deployment to be created..."
+for i in {1..60}; do
+  if kubectl get deployment mlrun-db -n mlrun > /dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
+# 3. Extract the exact container name dynamically
+CONTAINER_NAME=$(kubectl get deployment mlrun-db -n mlrun -o jsonpath='{.spec.template.spec.containers[0].name}')
+
+# 4. Inject the emptyDir volume using a Strategic Merge Patch
+echo "Patching $CONTAINER_NAME to fix socket permissions..."
+kubectl patch deployment mlrun-db -n mlrun --patch "
+spec:
+  template:
+    spec:
+      volumes:
+      - name: mysql-socket
+        emptyDir: {}
+      containers:
+      - name: ${CONTAINER_NAME}
+        volumeMounts:
+        - name: mysql-socket
+          mountPath: /var/run/mysqld
+"
+
+# 5. Bring Helm back to the foreground and wait for it to complete
+echo "Volume injected! Waiting for Helm installation to finish..."
+wait $HELM_PID
+
+# 6. Explicitly wait for the deployments to be fully ready
+echo "Installation complete, verifying readiness..."
 kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-db --timeout=1200s
 kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-api-chief --timeout=1200s
 
