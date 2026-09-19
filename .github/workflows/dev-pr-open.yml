@@ -101,7 +101,7 @@ jobs:
     - name: Debug mysql-fuse PVC interaction
       if: always()
       run: |
-        kubectl run mysql-debug3 -n mlrun --rm -it --restart=Never \
+        kubectl run mysql-debug3 -n mlrun --restart=Never \
           --image=mysql:8.4 \
           --overrides='{
             "spec": {
@@ -109,14 +109,17 @@ jobs:
               "containers": [{
                 "name": "mysql-debug3",
                 "image": "mysql:8.4",
-                "stdin": true,
-                "tty": true,
+                "command": ["bash", "-c", "ls -ld /var/run/mysqld; touch /var/run/mysqld/test && echo WRITE_OK || echo WRITE_FAILED; sleep 5"],
                 "volumeMounts": [{"name": "data", "mountPath": "/var/lib/mysql"}]
               }],
               "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "mlrun-db-pvc"}}]
             }
-          }' \
-          --command -- bash -c "ls -ld /var/run/mysqld; touch /var/run/mysqld/test && echo WRITE_OK || echo WRITE_FAILED"
+          }'
+
+        kubectl wait --for=condition=Ready=false pod/mysql-debug3 -n mlrun --timeout=30s 2>/dev/null || true
+        sleep 3
+        kubectl logs -n mlrun mysql-debug3
+        kubectl delete pod -n mlrun mysql-debug3 --ignore-not-found=true
     # - name: Debug Stuck Pods and Services
     #   if: always()
     #   run: |
