@@ -25,11 +25,11 @@ kubectl --namespace mlrun create secret generic ecr-build-secret \
 #  --from-literal=aws_access_key_id=AKIA... \
 
 echo "===> Installing mlrun with helm...artifical limit"
+# --wait \
+# --timeout 1000s \
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
-    # --wait \
-    # --timeout 1000s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=$(minikube ip) \
