@@ -129,16 +129,14 @@ jobs:
         echo "=== ALL POD STATUSES ==="
         kubectl get pods -n mlrun
 
-        echo "=== S3 INIT JOB LOGS ==="
-        kubectl logs job/mlrun-ce-s3-bucket-init -n mlrun
-        
-        echo "=== S3 INIT JOB EVENTS ==="
-        kubectl describe job/mlrun-ce-s3-bucket-init -n mlrun
-
     - name: Debug Stuck Pods and Services
       if: always()
       run: |
         kubectl logs -n mlrun deploy/mlrun-db --tail=50
+        kubectl logs deployment/mlrun-db -n mlrun --previous
+        kubectl describe pod -l app=mlrun-db -n mlrun
+        echo "====="
+        kubectl logs deployment/mlrun-api-chief -n mlrun --all-containers --previous
         
     # - name: Set up Python3.11
     #   uses: actions/setup-python@v7
