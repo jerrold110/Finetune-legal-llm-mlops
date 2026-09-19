@@ -32,32 +32,96 @@ jobs:
 
     steps:
     - uses: actions/checkout@v5
+    - name: Create k8s KinD Cluster
+      uses: helm/kind-action@v1.10.0
+      with:
+        node_image: kindest/node:v1.29.2
+    - name: Verify Cluster
+      run: |
+        kubectl cluster-info
+        kubectl get nodes
     - name: Set up Helm
       uses: azure/setup-helm@v4
       with:
         version: 'v4.1.4'
     - name: Verify Helm version
       run: helm version
-    - name: Set up Python3.11
-      uses: actions/setup-python@v7
-      with:
-        python-version: "3.11"
-    - name: Set up uv
-      uses: astral-sh/setup-uv@v5
-    - name: Install dependencies
+    - name: Diagnose Kind / Container Runtime Foundation
       run: |
-        python -m pip install --upgrade pip
-        uv pip sync --system requirements_ci.txt
+        echo "=== Kind cluster info ==="
+        kind version
+        kubectl version -o yaml
+        docker version
+        echo ""
+        echo "=== Node image and OS ==="
+        kubectl get nodes -o wide
+        docker exec chart-testing-control-plane cat /etc/os-release
+        echo ""
+        echo "=== containerd version INSIDE the kind node ==="
+        docker exec chart-testing-control-plane containerd --version
+        docker exec chart-testing-control-plane runc --version
+        echo ""
+        echo "=== containerd config as the node actually runs it ==="
+        docker exec chart-testing-control-plane cat /etc/containerd/config.toml
+        echo ""
+        echo "=== kernel ==="
+        docker exec chart-testing-control-plane uname -r
+        uname -r
+    - name: Inspect actual OCI runtime spec for a test container
+      run: |
+        kubectl run spec-test -n mlrun --image=busybox --restart=Never --command -- sleep 300
+        kubectl wait --for=condition=Ready pod/spec-test -n mlrun --timeout=30s
+        CID=$(docker exec chart-testing-control-plane crictl ps --name spec-test -q)
+        echo "Container ID: $CID"
+        docker exec chart-testing-control-plane find /run/containerd/io.containerd.runtime.v2.task/k8s.io/$CID -name config.json -exec cat {} \; | python3 -m json.tool > spec.json
+        echo "=== Mounts touching /run ==="
+        python3 -c "
+        import json
+        spec = json.load(open('spec.json'))
+        for m in spec['mounts']:
+            if '/run' in m['destination']:
+                print(m)
+        "
+        kubectl delete pod spec-test -n mlrun
+    # - name: Setup Kubernetes ECR Secret file
+    #   run: |
+    #     cat <<EOF > ./k8s/credentials
+    #     [default]
+    #     aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    #     region=${{ env.AWS_REGION }}
+    #     EOF
+    # - name: Install MLRun via Helm
+    #   run: |
+    #     chmod +x ./k8s/install.sh
+    #     ./k8s/install.sh
+    #     rm ./k8s/credentials
+    # - name: Debug Stuck Pods and Services
+    #   if: always()
+    #   run: |
+    #     kubectl logs -n mlrun deploy/mlrun-db --tail=50
+    # - name: List MLRun Services
+    #   run: kubectl get svc -n mlrun
+    # - name: Set up Python3.11
+    #   uses: actions/setup-python@v7
+    #   with:
+    #     python-version: "3.11"
+    # - name: Set up uv
+    #   uses: astral-sh/setup-uv@v5
+    # - name: Install dependencies
+    #   run: |
+    #     python -m pip install --upgrade pip
+    #     uv pip sync --system requirements_ci.txt
     # - name: Lint Python with flake8
     #   run: |
     #     # stop the build if there are errors
     #     flake8 src/ setup/ images/
-    - name: Setup AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+    # - name: Setup AWS Credentials
+    #   uses: aws-actions/configure-aws-credentials@v4
+    #   with:
+    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    #     aws-region: ${{ env.AWS_REGION }}
     # - name: Setup Terraform CLI 1.16.2
     #   uses: hashicorp/setup-terraform@v3
     #   with:
@@ -80,25 +144,6 @@ jobs:
     #   run: |
     #     chmod +x ./images/build_ecr.sh
     #     ./images/build_ecr.sh
-    - name: Setup Kubernetes ECR Secret file
-      run: |
-        cat <<EOF > ./k8s/credentials
-        [default]
-        aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        region=${{ env.AWS_REGION }}
-        EOF
-    - name: Create k8s Kind Cluster
-      uses: helm/kind-action@v1.10.0
-    - name: Install MLRun via Helm
-      run: |
-        chmod +x ./k8s/install.sh
-        ./k8s/install.sh
-        rm ./k8s/credentials
-    - name: Debug Stuck Pods and Services
-      if: always()
-      run: |
-        kubectl logs -n mlrun deploy/mlrun-db --tail=50
         
     # - name: Terraform apply
     #   run: |
@@ -114,8 +159,7 @@ jobs:
         
     #     # Wait a few seconds for the connection to establish
     #     sleep 5
-    - name: List MLRun Services
-      run: kubectl get svc -n mlrun
+
     # - name: Build MLRun functions
     #   env: 
     #     FEATURE_BRANCH: ${{ github.head_ref }}
