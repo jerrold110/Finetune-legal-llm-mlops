@@ -30,6 +30,7 @@ echo "===> Installing mlrun with helm...artifical limit"
 helm --namespace mlrun \
     install mlrun-ce \
     --version 0.11.0 \
+    --timeout 900s \
     --set global.registry.url=$ECR_SERVER \
     --set global.registry.secretName=ecr-build-secret \
     --set global.externalHostAddress=$(minikube ip) \
@@ -38,6 +39,7 @@ helm --namespace mlrun \
     --set spark-operator.enabled=false \
     mlrun-ce/mlrun-ce
 
+# 2. Explicitly wait for the long-running Deployments
 echo "Waiting up to 20 minutes for MLRun Deployments..."
 kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-db --timeout=1200s
 kubectl wait --namespace mlrun --for=condition=Available deployment/mlrun-api-chief --timeout=1200s
