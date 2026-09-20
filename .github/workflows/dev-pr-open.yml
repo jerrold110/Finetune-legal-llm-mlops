@@ -139,6 +139,34 @@ jobs:
           --all-containers=true \
           --previous \
           --tail=-1 || true
+    - name: Inspect MLRun DB MySQL configuration
+      if: always()
+      run: |
+        set +e
+
+        DB_POD=$(kubectl -n mlrun get pods \
+          -o name | grep '^pod/mlrun-db-' | head -n 1 | sed 's|pod/||')
+
+        if [ -z "$DB_POD" ]; then
+          echo "MLRun DB pod not found."
+          exit 0
+        fi
+
+        echo "=== MySQL ConfigMap ==="
+        kubectl -n mlrun get configmap mlrun-db \
+          -o yaml
+
+        echo "=== MySQL Init ConfigMap ==="
+        kubectl -n mlrun get configmap mlrun-db-init \
+          -o yaml
+
+        echo "=== Pod Security Context ==="
+        kubectl -n mlrun get pod "$DB_POD" \
+          -o jsonpath='{.spec.securityContext}{"\n"}'
+
+        echo "=== Container Security Context ==="
+        kubectl -n mlrun get pod "$DB_POD" \
+          -o jsonpath='{.spec.containers[0].securityContext}{"\n"}'
 
     # run: |
     #   echo "====="
