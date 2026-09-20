@@ -50,43 +50,6 @@ jobs:
     #     version: 'v4.1.4'
     - name: Verify Helm version
       run: helm version
-    # - name: Diagnose Kind / Container Runtime Foundation
-    #   run: |
-    #     echo "=== Kind cluster info ==="
-    #     kind version
-    #     kubectl version -o yaml
-    #     docker version
-    #     echo ""
-    #     echo "=== Node image and OS ==="
-    #     kubectl get nodes -o wide
-    #     docker exec chart-testing-control-plane cat /etc/os-release
-    #     echo ""
-    #     echo "=== containerd version INSIDE the kind node ==="
-    #     docker exec chart-testing-control-plane containerd --version
-    #     docker exec chart-testing-control-plane runc --version
-    #     echo ""
-    #     echo "=== containerd config as the node actually runs it ==="
-    #     docker exec chart-testing-control-plane cat /etc/containerd/config.toml
-    #     echo ""
-    #     echo "=== kernel ==="
-    #     docker exec chart-testing-control-plane uname -r
-    #     uname -r
-    # - name: Inspect actual OCI runtime spec for a test container
-    #   run: |
-    #     kubectl run spec-test -n mlrun --image=busybox --restart=Never --command -- sleep 300
-    #     kubectl wait --for=condition=Ready pod/spec-test -n mlrun --timeout=30s
-    #     CID=$(docker exec chart-testing-control-plane crictl ps --name spec-test -q)
-    #     echo "Container ID: $CID"
-    #     docker exec chart-testing-control-plane find /run/containerd/io.containerd.runtime.v2.task/k8s.io/$CID -name config.json -exec cat {} \; | python3 -m json.tool > spec.json
-    #     echo "=== Mounts touching /run ==="
-    #     python3 -c "
-    #     import json
-    #     spec = json.load(open('spec.json'))
-    #     for m in spec['mounts']:
-    #         if '/run' in m['destination']:
-    #             print(m)
-    #     "
-    #     kubectl delete pod spec-test -n mlrun
     - name: Setup Kubernetes ECR Secret file
       run: |
         cat <<EOF > ./k8s/credentials
@@ -100,6 +63,7 @@ jobs:
         chmod +x ./k8s/install.sh
         ./k8s/install.sh
         rm ./k8s/credentials
+
     # - name: Debug mysql-fuse PVC interaction
     #   if: always()
     #   run: |
@@ -132,19 +96,61 @@ jobs:
         echo "=== ALL POD STATUSES ==="
         kubectl get pods -n mlrun
 
-        echo "MLRun PVC"
+        echo "=== ALL PVC ==="
         kubectl get pvc -n mlrun
 
     - name: Debug Stuck Pods and Services
       if: always()
       run: |
-        kubectl logs deployment/mlrun-db -n mlrun
+        set +e
 
-        echo "===== MLRun db logs"
-        kubectl logs deployment/mlrun-db -n mlrun --all-containers --max-log-requests=10
+        DB_POD=$(kubectl -n mlrun get pods \
+          -o name | grep '^pod/mlrun-db-' | head -n 1 | sed 's|pod/||')
 
-        echo "===== Describe mlrun-db pod"
-        kubectl describe pod -l app=mlrun-db -n mlrun
+        if [ -z "$DB_POD" ]; then
+          echo "MLRun DB pod not found."
+          exit 0
+        fi
+
+        echo "DB Pod: $DB_POD"
+
+        echo "=== DB Image ==="
+        kubectl -n mlrun get pod "$DB_POD" \
+          -o jsonpath='{range .spec.containers[*]}{.name}{" -> "}{.image}{"\n"}{end}'
+
+        echo "=== DB Image ID ==="
+        kubectl -n mlrun get pod "$DB_POD" \
+          -o jsonpath='{range .status.containerStatuses[*]}{.name}{" -> "}{.imageID}{"\n"}{end}'
+
+        echo "=== DB Pod YAML ==="
+        kubectl -n mlrun get pod "$DB_POD" \
+          -o yaml || true
+
+        echo "=== DB Pod Description ==="
+        kubectl -n mlrun describe pod "$DB_POD" || true
+
+        echo "=== Current DB Logs ==="
+        kubectl -n mlrun logs "$DB_POD" \
+          --all-containers=true \
+          --tail=-1 || true
+
+        echo "=== Previous DB Logs ==="
+        kubectl -n mlrun logs "$DB_POD" \
+          --all-containers=true \
+          --previous \
+          --tail=-1 || true
+
+    # run: |
+    #   echo "====="
+    #   kubectl logs deployment/mlrun-db -n mlrun
+
+    #   echo "===== MLRun db logs"
+    #   kubectl logs deployment/mlrun-db -n mlrun --all-containers --max-log-requests=10
+
+    #   echo "===== Describe mlrun-db pod"
+    #   kubectl describe pod -l app=mlrun-db -n mlrun
+
+    
 
     
     # echo "====="
@@ -225,5 +231,3 @@ jobs:
     #     -var-file="dev-ci.tfvars" \
     #     --auto-approve
       
-    
-
