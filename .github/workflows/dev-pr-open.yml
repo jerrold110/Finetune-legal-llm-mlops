@@ -37,120 +37,147 @@ jobs:
       with:
         cpus: max
         memory: max
-    - name: Create mlrun namespace
-      run: kubectl create namespace mlrun
-    - name: Verify Cluster
+    - name: Inspect CI Kubernetes environment
       run: |
-        kubectl cluster-info
-        kubectl get nodes
-        minikube ip
+        echo "=== Runner resources ==="
+        nproc
+        free -h
+        df -h
+        df -i
+
+        echo "=== Docker disk usage ==="
+        docker system df
+
+        echo "=== Kubernetes and Minikube versions ==="
+        kubectl version
+        minikube version
+
+        echo "=== Kubernetes node capacity and allocatable resources ==="
+        kubectl describe nodes
+
+        echo "=== Storage classes ==="
+        kubectl get storageclass
+
+        echo "=== Minikube filesystem ==="
+        minikube ssh -- df -h
+
+        echo "=== Minikube Docker container limits ==="
+        docker inspect minikube \
+          --format 'Memory bytes: {{.HostConfig.Memory}} | CPUs: {{.HostConfig.NanoCpus}}'
+        - name: Create mlrun namespace
+          run: kubectl create namespace mlrun
+        - name: Verify Cluster
+          run: |
+            kubectl cluster-info
+            kubectl get nodes
+            minikube ip
     # - name: Set up Helm
     #   uses: azure/setup-helm@v4
     #   with:
     #     version: 'v4.1.4'
     - name: Verify Helm version
       run: helm version
-    - name: Setup Kubernetes ECR Secret file
-      run: |
-        cat <<EOF > ./k8s/credentials
-        [default]
-        aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        region=${{ env.AWS_REGION }}
-        EOF
-    - name: Install MLRun via Helm
-      run: |
-        chmod +x ./k8s/install.sh
-        ./k8s/install.sh
-        rm ./k8s/credentials
+    # - name: Setup Kubernetes ECR Secret file
+    #   run: |
+    #     cat <<EOF > ./k8s/credentials
+    #     [default]
+    #     aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    #     region=${{ env.AWS_REGION }}
+    #     EOF
+    # - name: Install MLRun via Helm
+    #   run: |
+    #     chmod +x ./k8s/install.sh
+    #     ./k8s/install.sh
+    #     rm ./k8s/credentials
 
-    - name: List MLRun Pods & Services
-      if: always()
-      run: |
-        echo "=== All services ==="
-        kubectl get svc -n mlrun
+    # - name: List MLRun Pods & Services
+    #   if: always()
+    #   run: |
+    #     echo "=== All services ==="
+    #     kubectl get svc -n mlrun
 
-        echo "=== ALL POD STATUSES ==="
-        kubectl get pods -n mlrun
+    #     echo "=== ALL POD STATUSES ==="
+    #     kubectl get pods -n mlrun
 
-        echo "=== ALL PVC ==="
-        kubectl get pvc -n mlrun
+    #     echo "=== ALL PVC ==="
+    #     kubectl get pvc -n mlrun
 
-    - name: Diagnose MLRun DB after socket fix
-      if: always()
-      run: |
-        set +e
+    # - name: Diagnose MLRun DB after socket fix
+    #   if: always()
+    #   run: |
+    #     set +e
 
-        echo "=== MLRun Pod Statuses ==="
-        kubectl -n mlrun get pods -o wide
+    #     echo "=== MLRun Pod Statuses ==="
+    #     kubectl -n mlrun get pods -o wide
 
-        echo "=== DB Deployment ==="
-        kubectl -n mlrun describe deployment mlrun-db
+    #     echo "=== DB Deployment ==="
+    #     kubectl -n mlrun describe deployment mlrun-db
 
-        DB_POD=$(kubectl -n mlrun get pods \
-          --sort-by=.metadata.creationTimestamp \
-          -o name | grep '^pod/mlrun-db-' | tail -n 1 | sed 's|pod/||')
+    #     DB_POD=$(kubectl -n mlrun get pods \
+    #       --sort-by=.metadata.creationTimestamp \
+    #       -o name | grep '^pod/mlrun-db-' | tail -n 1 | sed 's|pod/||')
 
-        if [ -z "$DB_POD" ]; then
-          echo "MLRun DB pod not found."
-          exit 0
-        fi
+    #     if [ -z "$DB_POD" ]; then
+    #       echo "MLRun DB pod not found."
+    #       exit 0
+    #     fi
 
-        echo "=== Selected DB Pod: $DB_POD ==="
+    #     echo "=== Selected DB Pod: $DB_POD ==="
 
-        echo "=== DB Pod Description and Events ==="
-        kubectl -n mlrun describe pod "$DB_POD"
+    #     echo "=== DB Pod Description and Events ==="
+    #     kubectl -n mlrun describe pod "$DB_POD"
 
-        echo "=== DB Container Termination Details ==="
-        kubectl -n mlrun get pod "$DB_POD" \
-          -o jsonpath='{range .status.containerStatuses[*]}{.name}{" | state="}{.state}{" | lastState="}{.lastState}{" | restarts="}{.restartCount}{"\n"}{end}'
-        echo
+    #     echo "=== DB Container Termination Details ==="
+    #     kubectl -n mlrun get pod "$DB_POD" \
+    #       -o jsonpath='{range .status.containerStatuses[*]}{.name}{" | state="}{.state}{" | lastState="}{.lastState}{" | restarts="}{.restartCount}{"\n"}{end}'
+    #     echo
 
-        echo "=== Socket Preparation Init Container Logs ==="
-        kubectl -n mlrun logs "$DB_POD" \
-          -c prepare-mysql-socket --tail=-1 || true
+    #     echo "=== Socket Preparation Init Container Logs ==="
+    #     kubectl -n mlrun logs "$DB_POD" \
+    #       -c prepare-mysql-socket --tail=-1 || true
 
-        echo "=== MySQL Initialization Logs ==="
-        kubectl -n mlrun logs "$DB_POD" \
-          -c init-mysql --tail=-1 || true
+    #     echo "=== MySQL Initialization Logs ==="
+    #     kubectl -n mlrun logs "$DB_POD" \
+    #       -c init-mysql --tail=-1 || true
 
-        echo "=== Current MySQL Logs ==="
-        kubectl -n mlrun logs "$DB_POD" \
-          -c mlrun-db --tail=-1 || true
+    #     echo "=== Current MySQL Logs ==="
+    #     kubectl -n mlrun logs "$DB_POD" \
+    #       -c mlrun-db --tail=-1 || true
 
-        echo "=== Previous MySQL Logs ==="
-        kubectl -n mlrun logs "$DB_POD" \
-          -c mlrun-db --previous --tail=-1 || true
+    #     echo "=== Previous MySQL Logs ==="
+    #     kubectl -n mlrun logs "$DB_POD" \
+    #       -c mlrun-db --previous --tail=-1 || true
 
-        echo "=== DB Pod Volumes and Mounts ==="
-        kubectl -n mlrun get pod "$DB_POD" -o yaml
+    #     echo "=== DB Pod Volumes and Mounts ==="
+    #     kubectl -n mlrun get pod "$DB_POD" -o yaml
 
-        echo "=== UID 999 Socket Write Test ==="
-        kubectl -n mlrun logs "$DB_POD" \
-          -c verify-mysql-socket --tail=-1 || true
+    #     echo "=== UID 999 Socket Write Test ==="
+    #     kubectl -n mlrun logs "$DB_POD" \
+    #       -c verify-mysql-socket --tail=-1 || true
 
-        echo "=== S3 Bucket Initialization Job ==="
-        kubectl -n mlrun get job mlrun-ce-s3-bucket-init -o yaml || true
-        kubectl -n mlrun describe job mlrun-ce-s3-bucket-init || true
+    #     echo "=== S3 Bucket Initialization Job ==="
+    #     kubectl -n mlrun get job mlrun-ce-s3-bucket-init -o yaml || true
+    #     kubectl -n mlrun describe job mlrun-ce-s3-bucket-init || true
 
-        echo "=== S3 Bucket Initialization Pod Logs ==="
-        S3_PODS=$(kubectl -n mlrun get pods \
-          -o custom-columns=':metadata.name' --no-headers \
-          | grep '^mlrun-ce-s3-bucket-init-' || true)
+    #     echo "=== S3 Bucket Initialization Pod Logs ==="
+    #     S3_PODS=$(kubectl -n mlrun get pods \
+    #       -o custom-columns=':metadata.name' --no-headers \
+    #       | grep '^mlrun-ce-s3-bucket-init-' || true)
 
-        if [ -z "$S3_PODS" ]; then
-          echo "No S3 bucket initialization pods found."
-        else
-          for S3_POD in $S3_PODS; do
-            echo "=== S3 Pod: $S3_POD ==="
-            kubectl -n mlrun describe pod "$S3_POD" || true
-            kubectl -n mlrun logs "$S3_POD" \
-              --all-containers=true --tail=-1 --prefix=true || true
-          done
-        fi
+    #     if [ -z "$S3_PODS" ]; then
+    #       echo "No S3 bucket initialization pods found."
+    #     else
+    #       for S3_POD in $S3_PODS; do
+    #         echo "=== S3 Pod: $S3_POD ==="
+    #         kubectl -n mlrun describe pod "$S3_POD" || true
+    #         kubectl -n mlrun logs "$S3_POD" \
+    #           --all-containers=true --tail=-1 --prefix=true || true
+    #       done
+    #     fi
 
-        echo "=== Helm Release Status ==="
-        helm -n mlrun status mlrun-ce || true
+    #     echo "=== Helm Release Status ==="
+    #     helm -n mlrun status mlrun-ce || true
 
     
         
