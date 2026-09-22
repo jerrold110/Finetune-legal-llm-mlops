@@ -125,6 +125,33 @@ jobs:
         echo "=== DB Pod Volumes and Mounts ==="
         kubectl -n mlrun get pod "$DB_POD" -o yaml
 
+        echo "=== UID 999 Socket Write Test ==="
+        kubectl -n mlrun logs "$DB_POD" \
+          -c verify-mysql-socket --tail=-1 || true
+
+        echo "=== S3 Bucket Initialization Job ==="
+        kubectl -n mlrun get job mlrun-ce-s3-bucket-init -o yaml || true
+        kubectl -n mlrun describe job mlrun-ce-s3-bucket-init || true
+
+        echo "=== S3 Bucket Initialization Pod Logs ==="
+        S3_PODS=$(kubectl -n mlrun get pods \
+          -o custom-columns=':metadata.name' --no-headers \
+          | grep '^mlrun-ce-s3-bucket-init-' || true)
+
+        if [ -z "$S3_PODS" ]; then
+          echo "No S3 bucket initialization pods found."
+        else
+          for S3_POD in $S3_PODS; do
+            echo "=== S3 Pod: $S3_POD ==="
+            kubectl -n mlrun describe pod "$S3_POD" || true
+            kubectl -n mlrun logs "$S3_POD" \
+              --all-containers=true --tail=-1 --prefix=true || true
+          done
+        fi
+
+        echo "=== Helm Release Status ==="
+        helm -n mlrun status mlrun-ce || true
+
     
         
     # - name: Set up Python3.11

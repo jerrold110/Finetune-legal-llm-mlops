@@ -82,7 +82,35 @@ kubectl -n mlrun patch deployment mlrun-db \
       }
     }
   ]'
-
+# Test socket-directory write access as the same user that runs mysqld.
+kubectl -n mlrun patch deployment mlrun-db \
+  --type=json \
+  --patch='[
+    {
+      "op": "add",
+      "path": "/spec/template/spec/initContainers/-",
+      "value": {
+        "name": "verify-mysql-socket",
+        "image": "mysql:8.4",
+        "command": [
+          "/bin/sh",
+          "-ec",
+          "id; ls -ld /var/run/mysqld; ls -la /var/run/mysqld; test -w /var/run/mysqld; test ! -e /var/run/mysqld/mysql.sock.lock; touch /var/run/mysqld/mysql.sock.lock; rm /var/run/mysqld/mysql.sock.lock; echo UID999_SOCKET_WRITE_OK"
+        ],
+        "securityContext": {
+          "runAsUser": 999,
+          "runAsGroup": 999
+        },
+        "volumeMounts": [
+          {
+            "name": "mysql-socket",
+            "mountPath": "/var/run/mysqld"
+          }
+        ]
+      }
+    }
+  ]'
+  
 # Fail the installation script if the patched DB still cannot become ready.
 kubectl -n mlrun rollout status deployment/mlrun-db --timeout=300s
 
