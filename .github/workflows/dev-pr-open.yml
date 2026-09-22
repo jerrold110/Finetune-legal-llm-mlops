@@ -47,7 +47,7 @@ jobs:
         memory: max
     - name: Verify Kubernetes version
       run: kubectl version
-      
+
     - name: Create mlrun namespace
       run: kubectl create namespace mlrun
     - name: Verify Cluster
@@ -91,7 +91,40 @@ jobs:
         echo
         echo "=== DB storage ==="
         kubectl -n mlrun get pvc mlrun-db-pvc -o wide
-        
+    - name: Diagnose failed MLRun installation
+      if: always()
+      run: |
+        set +e
+
+        echo "=== Helm status ==="
+        helm -n mlrun status mlrun-ce
+
+        echo "=== Pods ==="
+        kubectl -n mlrun get pods -o wide
+
+        DB_POD=$(kubectl -n mlrun get pods \
+          -l app.kubernetes.io/component=db \
+          -o jsonpath='{.items[0].metadata.name}')
+
+        if [ -n "$DB_POD" ]; then
+          echo "=== DB previous logs ==="
+          kubectl -n mlrun logs "$DB_POD" \
+            -c mlrun-db --previous --tail=100 || true
+
+          echo "=== DB current logs ==="
+          kubectl -n mlrun logs "$DB_POD" \
+            -c mlrun-db --tail=100 || true
+
+          echo "=== DB description ==="
+          kubectl -n mlrun describe pod "$DB_POD"
+        fi
+
+        echo "=== Failed jobs ==="
+        kubectl -n mlrun get jobs
+
+        echo "=== Recent events ==="
+        kubectl -n mlrun get events \
+          --sort-by=.lastTimestamp | tail -n 60
 
     # - name: List MLRun Pods & Services
     #   if: always()

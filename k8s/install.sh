@@ -30,7 +30,7 @@ echo "===> Installing mlrun with helm"
 helm --namespace mlrun \
   install mlrun-ce \
   --wait \
-  --timeout 750s \
+  --timeout 600s \
   --set global.registry.url="$ECR_SERVER" \
   --set global.registry.secretName=ecr-build-secret \
   --set global.externalHostAddress="$(minikube ip)" \
