@@ -29,7 +29,7 @@ echo "===> Installing mlrun with helm"
 
 helm --namespace mlrun \
   install mlrun-ce \
-  --no-hooks \
+  --wait \
   --timeout 750s \
   --set global.registry.url="$ECR_SERVER" \
   --set global.registry.secretName=ecr-build-secret \
@@ -38,82 +38,6 @@ helm --namespace mlrun \
   --set kube-prometheus-stack.enabled=false \
   --set spark-operator.enabled=false \
   mlrun-ce/mlrun-ce
-
-# Mount a writable directory at /var/run/mysqld and give UID 999 ownership.
-kubectl -n mlrun patch deployment mlrun-db \
-  --type=json \
-  --patch='[
-    {
-      "op": "add",
-      "path": "/spec/template/spec/volumes/-",
-      "value": {
-        "name": "mysql-socket",
-        "emptyDir": {}
-      }
-    },
-    {
-      "op": "add",
-      "path": "/spec/template/spec/containers/0/volumeMounts/-",
-      "value": {
-        "name": "mysql-socket",
-        "mountPath": "/var/run/mysqld"
-      }
-    },
-    {
-      "op": "add",
-      "path": "/spec/template/spec/initContainers/-",
-      "value": {
-        "name": "prepare-mysql-socket",
-        "image": "mysql:8.4",
-        "command": [
-          "/bin/sh",
-          "-c",
-          "set -e; chown 999:999 /var/run/mysqld; chmod 0770 /var/run/mysqld; ls -ld /var/run/mysqld"
-        ],
-        "securityContext": {
-          "runAsUser": 0,
-          "runAsGroup": 0
-        },
-        "volumeMounts": [
-          {
-            "name": "mysql-socket",
-            "mountPath": "/var/run/mysqld"
-          }
-        ]
-      }
-    }
-  ]'
-# Test socket-directory write access as the same user that runs mysqld.
-kubectl -n mlrun patch deployment mlrun-db \
-  --type=json \
-  --patch='[
-    {
-      "op": "add",
-      "path": "/spec/template/spec/initContainers/-",
-      "value": {
-        "name": "verify-mysql-socket",
-        "image": "mysql:8.4",
-        "command": [
-          "/bin/sh",
-          "-ec",
-          "id; ls -ld /var/run/mysqld; ls -la /var/run/mysqld; test -w /var/run/mysqld; test ! -e /var/run/mysqld/mysql.sock.lock; touch /var/run/mysqld/mysql.sock.lock; rm /var/run/mysqld/mysql.sock.lock; echo UID999_SOCKET_WRITE_OK"
-        ],
-        "securityContext": {
-          "runAsUser": 999,
-          "runAsGroup": 999
-        },
-        "volumeMounts": [
-          {
-            "name": "mysql-socket",
-            "mountPath": "/var/run/mysqld"
-          }
-        ]
-      }
-    }
-  ]'
-
-# Fail the installation script if the patched DB still cannot become ready.
-kubectl -n mlrun rollout status deployment/mlrun-db --timeout=300s
 
 #####################################################################
 # Credentials for pods to pull images
