@@ -41,8 +41,13 @@ jobs:
     - name: Start Minikube
       uses: medyagh/setup-minikube@latest
       with:
+        driver: docker
+        kubernetes-version: v1.34.1
         cpus: max
         memory: max
+    - name: Verify Kubernetes version
+      run: kubectl version
+      
     - name: Create mlrun namespace
       run: kubectl create namespace mlrun
     - name: Verify Cluster
