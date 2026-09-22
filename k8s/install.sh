@@ -29,6 +29,7 @@ echo "===> Installing mlrun with helm"
 
 helm --namespace mlrun \
   install mlrun-ce \
+  --no-hooks \
   --timeout 750s \
   --set global.registry.url="$ECR_SERVER" \
   --set global.registry.secretName=ecr-build-secret \
@@ -110,7 +111,7 @@ kubectl -n mlrun patch deployment mlrun-db \
       }
     }
   ]'
-  
+
 # Fail the installation script if the patched DB still cannot become ready.
 kubectl -n mlrun rollout status deployment/mlrun-db --timeout=300s
 
