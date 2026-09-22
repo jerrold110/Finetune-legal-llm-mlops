@@ -64,29 +64,6 @@ jobs:
         ./k8s/install.sh
         rm ./k8s/credentials
 
-    # - name: Debug mysql-fuse PVC interaction
-    #   if: always()
-    #   run: |
-    #     kubectl run mysql-debug3 -n mlrun --restart=Never \
-    #       --image=mysql:8.4 \
-    #       --overrides='{
-    #         "spec": {
-    #           "securityContext": {"runAsUser": 0},
-    #           "containers": [{
-    #             "name": "mysql-debug3",
-    #             "image": "mysql:8.4",
-    #             "command": ["bash", "-c", "ls -ld /var/run/mysqld; touch /var/run/mysqld/test && echo WRITE_OK || echo WRITE_FAILED; sleep 5"],
-    #             "volumeMounts": [{"name": "data", "mountPath": "/var/lib/mysql"}]
-    #           }],
-    #           "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "mlrun-db-pvc"}}]
-    #         }
-    #       }'
-
-    #     kubectl wait --for=condition=Ready=false pod/mysql-debug3 -n mlrun --timeout=30s 2>/dev/null || true
-    #     sleep 3
-    #     kubectl logs -n mlrun mysql-debug3
-    #     kubectl delete pod -n mlrun mysql-debug3 --ignore-not-found=true
-
     - name: List MLRun Pods & Services
       if: always()
       run: |
@@ -99,90 +76,56 @@ jobs:
         echo "=== ALL PVC ==="
         kubectl get pvc -n mlrun
 
-    - name: Debug Stuck Pods and Services
+    - name: Diagnose MLRun DB after socket fix
       if: always()
       run: |
         set +e
 
+        echo "=== MLRun Pod Statuses ==="
+        kubectl -n mlrun get pods -o wide
+
+        echo "=== DB Deployment ==="
+        kubectl -n mlrun describe deployment mlrun-db
+
         DB_POD=$(kubectl -n mlrun get pods \
-          -o name | grep '^pod/mlrun-db-' | head -n 1 | sed 's|pod/||')
+          --sort-by=.metadata.creationTimestamp \
+          -o name | grep '^pod/mlrun-db-' | tail -n 1 | sed 's|pod/||')
 
         if [ -z "$DB_POD" ]; then
           echo "MLRun DB pod not found."
           exit 0
         fi
 
-        echo "DB Pod: $DB_POD"
+        echo "=== Selected DB Pod: $DB_POD ==="
 
-        echo "=== DB Image ==="
+        echo "=== DB Pod Description and Events ==="
+        kubectl -n mlrun describe pod "$DB_POD"
+
+        echo "=== DB Container Termination Details ==="
         kubectl -n mlrun get pod "$DB_POD" \
-          -o jsonpath='{range .spec.containers[*]}{.name}{" -> "}{.image}{"\n"}{end}'
+          -o jsonpath='{range .status.containerStatuses[*]}{.name}{" | state="}{.state}{" | lastState="}{.lastState}{" | restarts="}{.restartCount}{"\n"}{end}'
+        echo
 
-        echo "=== DB Image ID ==="
-        kubectl -n mlrun get pod "$DB_POD" \
-          -o jsonpath='{range .status.containerStatuses[*]}{.name}{" -> "}{.imageID}{"\n"}{end}'
-
-        echo "=== DB Pod YAML ==="
-        kubectl -n mlrun get pod "$DB_POD" \
-          -o yaml || true
-
-        echo "=== DB Pod Description ==="
-        kubectl -n mlrun describe pod "$DB_POD" || true
-
-        echo "=== Current DB Logs ==="
+        echo "=== Socket Preparation Init Container Logs ==="
         kubectl -n mlrun logs "$DB_POD" \
-          --all-containers=true \
-          --tail=-1 || true
+          -c prepare-mysql-socket --tail=-1 || true
 
-        echo "=== Previous DB Logs ==="
+        echo "=== MySQL Initialization Logs ==="
         kubectl -n mlrun logs "$DB_POD" \
-          --all-containers=true \
-          --previous \
-          --tail=-1 || true
-    - name: Inspect MLRun DB MySQL configuration
-      if: always()
-      run: |
-        set +e
+          -c init-mysql --tail=-1 || true
 
-        DB_POD=$(kubectl -n mlrun get pods \
-          -o name | grep '^pod/mlrun-db-' | head -n 1 | sed 's|pod/||')
+        echo "=== Current MySQL Logs ==="
+        kubectl -n mlrun logs "$DB_POD" \
+          -c mlrun-db --tail=-1 || true
 
-        if [ -z "$DB_POD" ]; then
-          echo "MLRun DB pod not found."
-          exit 0
-        fi
+        echo "=== Previous MySQL Logs ==="
+        kubectl -n mlrun logs "$DB_POD" \
+          -c mlrun-db --previous --tail=-1 || true
 
-        echo "=== MySQL ConfigMap ==="
-        kubectl -n mlrun get configmap mlrun-db \
-          -o yaml
-
-        echo "=== MySQL Init ConfigMap ==="
-        kubectl -n mlrun get configmap mlrun-db-init \
-          -o yaml
-
-        echo "=== Pod Security Context ==="
-        kubectl -n mlrun get pod "$DB_POD" \
-          -o jsonpath='{.spec.securityContext}{"\n"}'
-
-        echo "=== Container Security Context ==="
-        kubectl -n mlrun get pod "$DB_POD" \
-          -o jsonpath='{.spec.containers[0].securityContext}{"\n"}'
-
-    # run: |
-    #   echo "====="
-    #   kubectl logs deployment/mlrun-db -n mlrun
-
-    #   echo "===== MLRun db logs"
-    #   kubectl logs deployment/mlrun-db -n mlrun --all-containers --max-log-requests=10
-
-    #   echo "===== Describe mlrun-db pod"
-    #   kubectl describe pod -l app=mlrun-db -n mlrun
+        echo "=== DB Pod Volumes and Mounts ==="
+        kubectl -n mlrun get pod "$DB_POD" -o yaml
 
     
-
-    
-    # echo "====="
-    # kubectl logs deployment/mlrun-api-chief -n mlrun --all-containers --previous
         
     # - name: Set up Python3.11
     #   uses: actions/setup-python@v7

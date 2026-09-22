@@ -24,20 +24,69 @@ kubectl --namespace mlrun create secret generic ecr-build-secret \
  # Literal secret does not work
 #  --from-literal=aws_access_key_id=AKIA... \
 
+####################################################################
 echo "===> Installing mlrun with helm"
-# 1. Start Helm in the background so it does not block the terminal
-helm --namespace mlrun \
-    install mlrun-ce \
-    --wait \
-    --timeout 750s \
-    --set global.registry.url=$ECR_SERVER \
-    --set global.registry.secretName=ecr-build-secret \
-    --set global.externalHostAddress=$(minikube ip) \
-    --set pipelines.enabled=false \
-    --set kube-prometheus-stack.enabled=false \
-    --set spark-operator.enabled=false \
-    mlrun-ce/mlrun-ce 
 
+helm --namespace mlrun \
+  install mlrun-ce \
+  --timeout 750s \
+  --set global.registry.url="$ECR_SERVER" \
+  --set global.registry.secretName=ecr-build-secret \
+  --set global.externalHostAddress="$(minikube ip)" \
+  --set pipelines.enabled=false \
+  --set kube-prometheus-stack.enabled=false \
+  --set spark-operator.enabled=false \
+  mlrun-ce/mlrun-ce
+
+# Mount a writable directory at /var/run/mysqld and give UID 999 ownership.
+kubectl -n mlrun patch deployment mlrun-db \
+  --type=json \
+  --patch='[
+    {
+      "op": "add",
+      "path": "/spec/template/spec/volumes/-",
+      "value": {
+        "name": "mysql-socket",
+        "emptyDir": {}
+      }
+    },
+    {
+      "op": "add",
+      "path": "/spec/template/spec/containers/0/volumeMounts/-",
+      "value": {
+        "name": "mysql-socket",
+        "mountPath": "/var/run/mysqld"
+      }
+    },
+    {
+      "op": "add",
+      "path": "/spec/template/spec/initContainers/-",
+      "value": {
+        "name": "prepare-mysql-socket",
+        "image": "mysql:8.4",
+        "command": [
+          "/bin/sh",
+          "-c",
+          "set -e; chown 999:999 /var/run/mysqld; chmod 0770 /var/run/mysqld; ls -ld /var/run/mysqld"
+        ],
+        "securityContext": {
+          "runAsUser": 0,
+          "runAsGroup": 0
+        },
+        "volumeMounts": [
+          {
+            "name": "mysql-socket",
+            "mountPath": "/var/run/mysqld"
+          }
+        ]
+      }
+    }
+  ]'
+
+# Fail the installation script if the patched DB still cannot become ready.
+kubectl -n mlrun rollout status deployment/mlrun-db --timeout=300s
+
+#####################################################################
 # Credentials for pods to pull images
 echo "===> Recreating secret, ECR pull credentials for k8s jobs expire every 12 hours"
 kubectl --namespace mlrun delete secret ecr-pull-secret
