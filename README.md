@@ -48,6 +48,7 @@ The deployment process of MLRun job functions (k8s batch jobs) are unique in tha
 - https://docs.mlrun.org/en/stable/runtimes/create-and-use-functions.html#load-code-from-container
 - https://docs.mlrun.org/en/stable/runtimes/image-build.html#working-with-code-repository
 - https://docs.mlrun.org/en/stable/concepts/functions-overview.html
+- https://docs.mlrun.org/en/1.11.x/projects/ci-integration.html#using-github-actions
 
 ![MLRun overview](diagram/cicd3.png)
 ![MLRun overview](diagram/cicd4.png)
@@ -61,7 +62,11 @@ The CI/CD process that builds, tests, commits to version control, and deploys th
 ### Mono-repo vs Multi-repo
 In this MLOps platform project, there are multiple pipelines where similarities could be drawn between it and a platform with multiple microservices. I am using a mono-repo approach in this project, which is not a good approach in general because every single change no matter how small requires building, testing, merging, and deploying all the pipelines in this platform.
 
-As this is a portfolio project with only me working on it, I am using a mono-repo approach and bundling all the MLOps pipelines in this platform into a single repository.
+As this is a portfolio project with only me working on it, I am using a mono-repo approach and bundling all the MLOps pipelines in this platform into a single 
+repository.
+
+### Continuous Integration Testing: Iguazio platform vs Ephemeral Cluster
+I initially attempted to provision an ephemeral Kubernetes cluster using Minikube within GitHub Actions to install MLRun for each CI run. Although the same Helm chart worked locally on Docker Desktop Kubernetes, the CI installation repeatedly failed due to MySQL startup errors despite troubleshooting resource allocation, Kubernetes versions, and container permissions. I therefore decided to adopt MLRun’s officially recommended CI approach, which deploys projects to an existing MLRun platform rather than provisioning a new cluster for each run. In production, this would typically use a persistent, managed MLRun environment; however, I did not implement that deployment in this portfolio project because it would require a paid subscription.
 
 ## Recommended project lifecycle
 This is the recommended project lifecycle that incorporates CI/CD with Git from the official  MLRun documentation:
@@ -384,7 +389,7 @@ Appconfig and Cloudwatch, Cloudwatch metric  are used in conjunction with the La
 ![Picture](diagram/deploy3.png)
 
 ## Observability
-We track a few data points during operation: Traces, Logs, Model performance metrics. Model tracing are extremely long stings of data and storing them in CloudWatch will cause cost to increase out of control - hence I use data firehose (microbatches) to write them to parquet files in S3, which also facilitates automated expansion of training datasets for `ongoing training`.
+We track a few data points during operation: Traces, Logs, Model performance metrics. Model tracing are extremely long stings of data and storing them in CloudWatch will cause cost to increase out of control - hence I use data firehose (microbatches) to write them to parquet files in S3, which also facilitates automated expansion of training datasets for `continuous training`.
 
 ![Picture](diagram/observe1.png)
 

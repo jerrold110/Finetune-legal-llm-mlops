@@ -29,10 +29,10 @@ docker login \
 # --repository-name $Repo_name \
 # --region us-east-1
 
-# docker tag my-busybox-docker:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
+# docker tag my-busybox-docker:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${image_tag_short}"
 # docker tag my-busybox-docker:latest "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:test_abcd"
 
-# docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${IMAGE_TAG}"
+# docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:${image_tag_short}"
 # docker push "${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${Repo_name}:test_abcd"
 
 # # MLRun Image ==============================
