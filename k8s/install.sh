@@ -17,6 +17,7 @@ ECR_SERVER="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
 echo $ECR_SERVER
 
 # Credentials for kaniko to push and pull images during build
+# This file is created in github actions before this step or manually for local development
 echo "===> Creating generic secret ecr-build-secret"
 # kubectl --namespace mlrun delete secret ecr-build-secret
 kubectl --namespace mlrun create secret generic ecr-build-secret \
@@ -30,7 +31,7 @@ echo "===> Installing mlrun with helm"
 helm --namespace mlrun \
   install mlrun-ce \
   --wait \
-  --timeout 600s \
+  --timeout 2000s \
   --set global.registry.url="$ECR_SERVER" \
   --set global.registry.secretName=ecr-build-secret \
   --set global.externalHostAddress="$(minikube ip)" \
