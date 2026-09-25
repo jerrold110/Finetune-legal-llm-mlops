@@ -40,7 +40,7 @@ MLRun is an open-source MLOps orchestration framework for managing ML/GenAI appl
 2. It provides fully functional model/data/LLM prompt registries with various storage backends including S3.
 3. It comes with Nuclio which allows me to create real-time functions that can be triggered by external events such as a **model drift detection alarm** on Amazon Cloudwatch.
 4. Platform updates do not require updating the container images running on Kubernetes (they can be considered as static) which vastly reduces the complexity of the CI/CD pipeline.
-5. It is offered as an open-source community version and a managed platform and is designed to be modular, so it facilitates easy switching between the community version and the platform version.
+5. It is offered as an open-source community version and a managed platform and is designed to be modular, so it facilitates easy switching the community version to the platform version.
 
 ## CI/CD pipeline
 The deployment process of MLRun job functions (k8s batch jobs) are unique in that they do not require updating the containers running on Kubernetes. They are built and pushed to a container registry, then pulled at runtime to begin a job. These can be a variety of function types including kubeflow pipelines.
@@ -67,10 +67,6 @@ repository.
 
 ### Continuous Integration Testing: Iguazio platform vs Ephemeral Cluster
 I initially attempted to provision an ephemeral Kubernetes cluster using Minikube within GitHub Actions to install MLRun for each CI run. Although the same Helm chart worked locally on Docker Desktop Kubernetes, the CI installation repeatedly failed due to MySQL startup errors despite troubleshooting resource allocation, Kubernetes versions, and container permissions. I therefore decided to adopt MLRun’s officially recommended CI approach, which deploys projects to an existing MLRun platform rather than provisioning a new cluster for each run. In production, this would typically use a persistent, managed MLRun environment; however, I did not implement that deployment in this portfolio project because it would require a paid subscription.
-
-- Kubernetes installation: https://docs.mlrun.org/en/1.11.x/install-mlrun-ce/kubernetes-install.html
-- AWS EKS installation: https://docs.mlrun.org/en/1.11.x/install-mlrun-ce/aws-install.html
-- Github Actions CI/CD: https://docs.mlrun.org/en/1.11.x/projects/ci-integration.html#using-github-actions
 
 ## Recommended project lifecycle
 This is the recommended project lifecycle that incorporates CI/CD with Git from the official  MLRun documentation:
@@ -115,8 +111,8 @@ This is the dataset I will be using. It was created by Yuta Koreeda and Christop
 ## Performance metrics for evaluation and model drift
 These metrics are calcualted with Rouge which is a n-gram evaluation method for matching identical text (unlike other NLP problems) between generated text and a reference. 
 - Rouge Precision: fraction of n-grams in generated text also in the reference text
-- Rouge Recall: fraction of ngrams from the reference text the generated text contained (Model drift detection)
-- Rouge F-measure: Combination of precision and recall (Model evaluation)
+- Rouge Recall: fraction of ngrams from the reference text the generated text contained
+- Rouge F-measure: Combination of precision and recall
 
 ### Metrics: Model performance evaluation
 Uses F-measure because we want the necessary text to be captured, while the omitting redundant text.
@@ -203,17 +199,6 @@ In the original architectural design at the beginning of this document, I chose 
 
 I use Lambda for the application logic that combines the prompt template with the user's input. This also creates an abstraction layer between the model service and API Gateway to simplify future migration and make the system design more extensible. I can now stream data to firehose for storage in an S3 bucket or send data to LangFuse which would not be possible. The model is currently served with Sagemaker endpoints, but in the future if I choose to switch to KServe and VLLM, I may do so.
 
-## Sagemaker pros and cons (Ad-hoc)
-Pros: 
-- Using Sagemaker for deployment will also save significant time in installing and configuring NVCC, CUDA, PyTorch to ensure that they are compatible. 
-- https://aws.github.io/deep-learning-containers/reference/available_images/
-- Less components to manage. Would have to create deployments/services for KServe/vLLM with ArgoCD (these are beefy components)
-
-Cons:
-- Cannot capture custom performance metrics metrics (hence using Cloudwatch SDK)
-- No real-time drift detection model rollback (hence using MLRun nuclio, eventbridge, lambda, MLRun model registry)
-- Weak dataset export workflow customisation (my design is automated, can use spark, register files on S3 with MLRun datasets, async stream)
-- No ability to track production model lineage (Abstracting traffic with appconfig is necessary to use my model registry's lineage through tags)
 
 ### This diagram shows the design of the architecture that uses AWS services used in serving. 
 
@@ -245,8 +230,6 @@ The model registry keep track of registered models with versioning and the model
 - Status (Standby, Challenger, Champion), with champion being the model in production. Code for tags is under `src/utils_model_registry.py`
 - A traceable lineage of the models put in production through the "succeeded" tag
 
-Many ideas for model 'tag': Challenger, Champion, Standby are taken from https://oneuptime.com/blog/post/2026-01-30-mlops-model-rollback/view#setting-up-a-model-registry
-
 ![Picture](diagram/scs/ui3.png)
 
 ## Training and Sagemaker training jobs
@@ -273,34 +256,6 @@ The artifacts produced during and after training are:
 - Learning curves of loss for the train/eval datasets during training to check for overfitting/underfitting/convergence
 - Performance metrics on test dataset and output data
 - The LoRA adapter 
-### GPU memory Optimisation techniques
-
-This is a summary of the techniques used to minimise GPU memory usage during long-context QLoRA fine-tuning (AI generated list). The references from Hugging Face documentation are in the training script `src/scripts/train_multi.py`
-
-* **Base model memory — 4-bit NF4 quantization with double quantization:** Loads the frozen base model in 4-bit NF4 and additionally quantizes the quantization constants to further reduce VRAM usage.
-
-* **Trainable parameter memory — LoRA / QLoRA:** Trains only small LoRA adapter matrices while keeping the quantized base model frozen, greatly reducing gradient and optimizer-state memory.
-
-* **Optimizer memory — 8-bit paged AdamW:** Stores optimizer states in 8-bit and uses paged memory management to reduce optimizer VRAM usage and handle temporary memory spikes.
-
-* **Activation memory — Gradient checkpointing:** Discards selected forward-pass activations and recomputes them during backpropagation, trading additional compute for substantially lower activation memory.
-
-* **Microbatch memory — Batch size 1 with gradient accumulation:** Processes only one sequence per GPU at a time while accumulating gradients across multiple steps to maintain a larger effective batch size.
-
-* **Precision memory — BF16 mixed precision:** Uses BF16 for computation and non-quantized model components instead of FP32, reducing tensor memory while retaining a wide numerical range.
-
-* **Attention memory — PyTorch SDPA:** Uses optimized scaled dot-product attention kernels where available, reducing the memory overhead of attention for long sequences.
-
-* **Sequence memory — Dynamic padding:** Pads each batch only to its longest sequence rather than a fixed global maximum length, avoiding unnecessary computation and activation memory for shorter samples.
-
-* **KV-cache memory — Cache disabled during training:** Disables the autoregressive key/value cache because it is unnecessary during training and would otherwise consume additional VRAM.
-
-* **Evaluation memory — Batch size 1, loss-only evaluation and accumulation:** Keeps evaluation batches small, avoids retaining full prediction logits, and regularly moves evaluation outputs off the GPU.
-
-* **Multi-GPU memory placement — Explicit local GPU mapping:** Assigns each distributed training process directly to its corresponding GPU, preventing multiple processes from temporarily loading their models onto GPU 0.
-
-* **CUDA allocator stability — Expandable segments:** Enables PyTorch CUDA expandable memory segments to reduce memory fragmentation and lower the chance of allocator-related out-of-memory errors.
-
 
 ## Graphs of the training job loss curves for two different training jobs
 The evaluation frequency (frequency which to calcuate loss of the model against the evaluation dataset) was set to a specific number of steps (mini-batches) NOT a number of Epochs.
