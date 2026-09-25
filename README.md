@@ -1,4 +1,12 @@
 # Project: MLOps platform for open-weight LMs
+
+## Contents
+
+- [Introduction](#introduction)
+- [Architecture](#architecture)
+- [Model](#model)
+- [MLOps pipelines and platform system design](#mlops-pipelines-and-platform-system-design)
+
 ## Introduction
 This project is a MLOps platform for designing, building, deploying, and monitoring a Lora fine-tuned Large language model incorporating all the workflows in the ML lifecycle using MLRun, AWS infrastructure (including GPUs), and open-source libraries. The input prompts can go up to 11,000 tokens.
 
