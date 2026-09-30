@@ -8,10 +8,10 @@
 - [MLOps pipelines and platform system design](#mlops-pipelines-and-platform-system-design)
 
 ## Introduction
-This project is a MLOps platform for designing, building, deploying, and monitoring a Lora fine-tuned Large language model incorporating all the workflows in the ML lifecycle using MLRun, AWS infrastructure (including GPUs), and open-source libraries. The input prompts can go up to 11,000 tokens.
+This project is a MLOps platform for data preparation, training, deploying, monitoring, rolling back, versioning a LoRA fine-tuned Large language model incorporating all the workflows in the ML lifecycle using MLRun, AWS infrastructure (including GPU instances), and open-source libraries (PyArrow, Hugging Face libraries, Rouge, etc....). The input prompts can go up to 11,000 tokens.
 
 The MLOps principles I follow include:
-- Clear lineaage
+- Clear lineage
 - Reproducability
 - Automation
 - Artifacts generated at every stage
@@ -36,7 +36,11 @@ A tech stack selection using open-source and kubernetes-native software might lo
 
 ![Kubernetes overview](diagram/platformarch1.png)
 
-A tech stack only using a managed platform would simply be that platform.
+A tech stack only using a managed platform would simply be that platform:
+- Sagemaker
+- Vertex AI
+- Databricks
+- Azure ML
 
 I made the decision to use a combination of open-source and managed software because open-source offers me the flexibility of creating the customised workflows that I need to, and certain managed services (AWS) with sufficient customisability allows me to save large amounts of time developing solutions for common ML workloads while providing the functionality I need. This is my chosen tech stack:
 
@@ -46,9 +50,10 @@ I made the decision to use a combination of open-source and managed software bec
 MLRun is an open-source MLOps orchestration framework for managing ML/GenAI applications across the entire ML lifecycle. There are a few reasons I chose to use this framework:
 1. It allows me to create and orchestrate completely custom pipelines and run them as jobs on Kubernetes/Kubeflow pipelines.
 2. It provides fully functional model/data/LLM prompt registries with various storage backends including S3.
-3. It comes with Nuclio which allows me to create real-time functions that can be triggered by external events such as a **model drift detection alarm** on Amazon Cloudwatch.
-4. Platform updates do not require updating the container images running on Kubernetes (they can be considered as static) which vastly reduces the complexity of the CI/CD pipeline.
-5. It is offered as an open-source community version and a managed platform and is designed to be modular, so it facilitates easy switching between the community version and the platform version.
+3. It comes with runtimes such as Spark/Dask
+4. It comes with Nuclio which allows me to create real-time functions that can be triggered by external events such as a **model drift detection alarm** on Amazon Cloudwatch.
+5. Platform updates do not require updating the container images running on Kubernetes (they can be considered as static) which vastly reduces the complexity of the CI/CD pipeline.
+6. It is offered as an open-source community version and a managed platform and is designed to be modular, so it facilitates easy switching between the community version and the platform version.
 
 ## CI/CD pipeline
 The deployment process of MLRun job functions (k8s batch jobs) are unique in that they do not require updating the containers running on Kubernetes. They are built and pushed to a container registry, then pulled at runtime to begin a job. These can be a variety of function types including kubeflow pipelines.
@@ -214,14 +219,15 @@ I use Lambda for the application logic that combines the prompt template with th
 ## Sagemaker pros and cons (Ad-hoc)
 Pros: 
 - Using Sagemaker for deployment will also save significant time in installing and configuring NVCC, CUDA, PyTorch to ensure that they are compatible. 
-- https://aws.github.io/deep-learning-containers/reference/available_images/
+- Training & serving images: https://aws.github.io/deep-learning-containers/reference/available_images/
 - Less components to manage. Would have to create deployments/services for KServe/vLLM with ArgoCD (these are beefy components)
+- Sage endpoints come with system logs, no need to create monitoring service
 
 Cons:
 - Cannot capture custom performance metrics metrics (hence using Cloudwatch SDK)
 - No real-time drift detection model rollback (hence using MLRun nuclio, eventbridge, lambda, MLRun model registry)
 - Weak dataset export workflow customisation (my design is automated, can use spark, register files on S3 with MLRun datasets, async stream)
-- No ability to track production model lineage (Abstracting traffic with appconfig is necessary to use my model registry's lineage through tags)
+- No ability to track production model lineage (Abstracting traffic with Lambda + appconfig + Cloudwatch metric alarm is necessary to use my MLRun model registry's lineage through tags)
 
 ### This diagram shows the design of the architecture that uses AWS services used in serving. 
 
